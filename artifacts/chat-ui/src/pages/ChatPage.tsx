@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import {
   AlignLeft,
   ChevronRight,
@@ -8,9 +9,84 @@ import {
   Copy,
   Volume2,
   Share,
+  X,
+  Trash2,
+  Check,
 } from "lucide-react";
 
+interface Message {
+  id: string;
+  role: "user" | "ai";
+  text: string;
+}
+
+const AI_RESPONSE = "哈喽，Chi Xu！\ud83d\udc4b \u4eca\u5929\u60f3\u641e\u5b66\u4e60\u3001\u505a\u5e94\u7528\uff0c\u8fd8\u662f\u804a\u70b9\u522b\u7684\uff1f";
+
+const MODELS = [
+  { label: "Flash", value: "flash" },
+  { label: "Thinking", value: "thinking" },
+  { label: "High", value: "high" },
+];
+
+function generateId() {
+  return Date.now().toString() + Math.random().toString(36).slice(2, 8);
+}
+
 export default function ChatPage() {
+  const [messages, setMessages] = useState<Message[]>([
+    { id: generateId(), role: "user", text: "\u54c8\u55bd" },
+    { id: generateId(), role: "ai", text: AI_RESPONSE },
+  ]);
+  const [inputText, setInputText] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("high");
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [replying, setReplying] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const scrollToBottom = () => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, replying]);
+
+  const handleSend = () => {
+    const text = inputText.trim();
+    if (!text) return;
+
+    const userMsg: Message = { id: generateId(), role: "user", text };
+    setMessages((prev) => [...prev, userMsg]);
+    setInputText("");
+    setReplying(true);
+    setIsThinking(true);
+
+    // Simulate AI thinking + reply
+    setTimeout(() => {
+      setIsThinking(false);
+      const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
+      setMessages((prev) => [...prev, aiMsg]);
+      setReplying(false);
+    }, 1200);
+  };
+
+  const handleDelete = (id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    setActiveMsgId(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <div
       style={{
@@ -25,6 +101,108 @@ export default function ChatPage() {
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
       }}
     >
+      {/* Model Selector Overlay */}
+      {modelOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(0,0,0,0.12)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            paddingTop: 72,
+          }}
+          onClick={() => setModelOpen(false)}
+        >
+          <div
+            style={{
+              background: "hsl(0 0% 100%)",
+              borderRadius: 20,
+              padding: "18px 0",
+              width: 260,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Model title */}
+            <button
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
+                padding: "0 20px 12px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                borderBottom: "1px solid hsl(0 0% 92%)",
+                fontSize: 17,
+                fontWeight: 600,
+                color: "hsl(220 15% 10%)",
+                letterSpacing: -0.3,
+              }}
+            >
+              <span>
+                GPT-5.5
+              </span>
+              <ChevronRight
+                size={16}
+                strokeWidth={2.2}
+                style={{ color: "hsl(220 9% 55%)" }}
+              />
+            </button>
+
+            {/* Intelligence label */}
+            <div
+              style={{
+                padding: "12px 20px 6px",
+                fontSize: 13,
+                color: "hsl(220 9% 55%)",
+                fontWeight: 500,
+                letterSpacing: 0.2,
+              }}
+            >
+              Intelligence
+            </div>
+
+            {/* Model options */}
+            {MODELS.map((m) => (
+              <button
+                key={m.value}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  width: "100%",
+                  padding: "10px 20px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  fontWeight: selectedModel === m.value ? 600 : 400,
+                  color: selectedModel === m.value ? "hsl(220 15% 10%)" : "hsl(220 15% 25%)",
+                }}
+                onClick={() => {
+                  setSelectedModel(m.value);
+                  setModelOpen(false);
+                }}
+              >
+                <span>{m.label}</span>
+                {selectedModel === m.value && (
+                  <Check
+                    size={18}
+                    strokeWidth={2.5}
+                    style={{ color: "hsl(220 15% 15%)" }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Top Nav */}
       <div
         style={{
@@ -61,6 +239,7 @@ export default function ChatPage() {
               alignItems: "center",
               gap: 2,
             }}
+            onClick={() => setModelOpen(true)}
           >
             <span
               style={{
@@ -113,6 +292,7 @@ export default function ChatPage() {
 
       {/* Chat Area */}
       <div
+        ref={chatRef}
         style={{
           flex: 1,
           padding: "8px 18px 24px",
@@ -122,115 +302,249 @@ export default function ChatPage() {
           overflowY: "auto",
         }}
       >
-        {/* User bubble - right aligned */}
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <div
-            style={{
-              background: "hsl(142 55% 72%)",
-              color: "hsl(142 40% 15%)",
-              borderRadius: "20px 20px 6px 20px",
-              padding: "10px 16px",
-              fontSize: 16,
-              fontWeight: 500,
-              maxWidth: "70%",
-              letterSpacing: 0.1,
-            }}
-          >
-            哈喽
-          </div>
-        </div>
+        {messages.map((msg) => {
+          if (msg.role === "user") {
+            return (
+              <div
+                key={msg.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  position: "relative",
+                }}
+                onClick={() =>
+                  setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                }
+              >
+                <div
+                  style={{
+                    background: "hsl(142 55% 72%)",
+                    color: "hsl(142 40% 15%)",
+                    borderRadius: "20px 20px 6px 20px",
+                    padding: "10px 16px",
+                    fontSize: 16,
+                    fontWeight: 500,
+                    maxWidth: "70%",
+                    letterSpacing: 0.1,
+                    cursor: "pointer",
+                    userSelect: "none",
+                  }}
+                >
+                  {msg.text}
+                </div>
 
-        {/* AI response block */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Thinking label */}
-          <p
-            style={{
-              margin: 0,
-              fontSize: 14,
-              color: "hsl(220 9% 60%)",
-              fontStyle: "italic",
-              paddingLeft: 2,
-            }}
-          >
-            Thought for a second
-          </p>
+                {/* Delete bubble */}
+                {activeMsgId === msg.id && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: -34,
+                      right: 0,
+                      display: "flex",
+                      gap: 6,
+                    }}
+                  >
+                    <button
+                      style={{
+                        background: "hsl(0 0% 20%)",
+                        border: "none",
+                        borderRadius: 18,
+                        padding: "6px 12px",
+                        color: "#fff",
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(msg.id);
+                      }}
+                    >
+                      <Trash2 size={13} strokeWidth={2} />
+                      删除
+                    </button>
+                    <button
+                      style={{
+                        background: "hsl(0 0% 20%)",
+                        border: "none",
+                        borderRadius: "50%",
+                        width: 28,
+                        height: 28,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        color: "#fff",
+                        padding: 0,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMsgId(null);
+                      }}
+                    >
+                      <X size={14} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          }
 
-          {/* AI message text */}
-          <p
-            style={{
-              margin: 0,
-              fontSize: 16,
-              color: "hsl(220 15% 12%)",
-              lineHeight: 1.6,
-              letterSpacing: 0.1,
-            }}
-          >
-            哈喽，Chi Xu！👋 今天想搞学习、做应用，还是聊点别的？
-          </p>
+          // AI message
+          return (
+            <div
+              key={msg.id}
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              onClick={() =>
+                setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+              }
+            >
+              {/* Thinking label */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  color: "hsl(220 9% 60%)",
+                  fontStyle: "italic",
+                  paddingLeft: 2,
+                }}
+              >
+                Thought for a second
+              </p>
 
-          {/* Action icons row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 20,
-              marginTop: 4,
-            }}
-          >
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 9% 55%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <Copy size={18} strokeWidth={1.7} />
-            </button>
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 9% 55%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <Volume2 size={18} strokeWidth={1.7} />
-            </button>
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 9% 55%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <Share size={18} strokeWidth={1.7} />
-            </button>
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 9% 55%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-            >
-              <MoreHorizontal size={18} strokeWidth={1.7} />
-            </button>
-          </div>
-        </div>
+              {/* AI message text */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  color: "hsl(220 15% 12%)",
+                  lineHeight: 1.6,
+                  letterSpacing: 0.1,
+                  cursor: "pointer",
+                  userSelect: "none",
+                }}
+              >
+                {msg.text}
+              </p>
+
+              {/* Delete / actions */}
+              {activeMsgId === msg.id && (
+                <div style={{ display: "flex", gap: 6, marginTop: -6 }}>
+                  <button
+                    style={{
+                      background: "hsl(0 0% 20%)",
+                      border: "none",
+                      borderRadius: 18,
+                      padding: "6px 12px",
+                      color: "#fff",
+                      fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      cursor: "pointer",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(msg.id);
+                    }}
+                  >
+                    <Trash2 size={13} strokeWidth={2} />
+                    删除
+                  </button>
+                  <button
+                    style={{
+                      background: "hsl(0 0% 20%)",
+                      border: "none",
+                      borderRadius: "50%",
+                      width: 28,
+                      height: 28,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      color: "#fff",
+                      padding: 0,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveMsgId(null);
+                    }}
+                  >
+                    <X size={14} strokeWidth={2.5} />
+                  </button>
+                </div>
+              )}
+
+              {/* Action icons row */}
+              {activeMsgId !== msg.id && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 20,
+                    marginTop: 4,
+                  }}
+                >
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Copy size={18} strokeWidth={1.7} />
+                  </button>
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Volume2 size={18} strokeWidth={1.7} />
+                  </button>
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Share size={18} strokeWidth={1.7} />
+                  </button>
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <MoreHorizontal size={18} strokeWidth={1.7} />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Bottom Input Bar */}
@@ -267,18 +581,24 @@ export default function ChatPage() {
             <Plus size={22} strokeWidth={2} />
           </button>
 
-          {/* Text placeholder */}
-          <span
+          {/* Text input */}
+          <input
+            ref={inputRef}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask ChatGPT"
             style={{
               flex: 1,
               fontSize: 15.5,
-              color: "hsl(220 9% 65%)",
-              userSelect: "none",
+              color: "hsl(220 15% 12%)",
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              padding: 0,
               letterSpacing: 0.1,
             }}
-          >
-            Ask ChatGPT
-          </span>
+          />
 
           {/* Mic icon */}
           <button
@@ -311,6 +631,7 @@ export default function ChatPage() {
               flexShrink: 0,
               padding: 0,
             }}
+            onClick={handleSend}
           >
             {/* Waveform icon */}
             <svg
