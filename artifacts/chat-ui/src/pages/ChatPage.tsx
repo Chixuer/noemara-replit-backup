@@ -14,7 +14,7 @@ export default function ChatPage() {
   return (
     <div
       style={{
-        background: "hsl(210 20% 96%)",
+        background: "hsl(60 8% 96%)",
         minHeight: "100svh",
         display: "flex",
         flexDirection: "column",
@@ -32,7 +32,7 @@ export default function ChatPage() {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "14px 18px 10px",
-          background: "hsl(210 20% 96%)",
+          background: "hsl(60 8% 96%)",
         }}
       >
         {/* Left: hamburger + title */}
@@ -237,7 +237,7 @@ export default function ChatPage() {
       <div
         style={{
           padding: "10px 14px 28px",
-          background: "hsl(210 20% 96%)",
+          background: "hsl(60 8% 96%)",
         }}
       >
         <div
