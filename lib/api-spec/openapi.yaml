@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: asr
+    description: Speech recognition operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /asr/transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [asr]
+      summary: Transcribe audio to text using Qwen ASR
+      description: |
+        Accepts base64-encoded audio and returns a transcription from the
+        Qwen ASR model (qwen3-asr-flash). The API key is configured on the
+        server and is never exposed to the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AudioTranscriptionInput"
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AudioTranscriptionResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Transcription failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +69,38 @@ components:
           type: string
       required:
         - status
+    AudioTranscriptionInput:
+      type: object
+      required:
+        - audio
+      properties:
+        audio:
+          type: string
+          description: Base64-encoded audio data (without the data URL prefix)
+        format:
+          type: string
+          description: Audio format, e.g. webm, wav, mp3, m4a
+        hotwords:
+          type: string
+          description: Comma-separated hotwords to improve recognition
+    AudioTranscriptionResult:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: Transcribed text
+        raw:
+          type: object
+          description: Raw ASR provider response
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        details:
+          type: string
 

@@ -5,9 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 export interface AudioTranscriptionInput {
   /** Base64-encoded audio data (without the data URL prefix) */
@@ -17,21 +14,3 @@ export interface AudioTranscriptionInput {
   /** Comma-separated hotwords to improve recognition */
   hotwords?: string;
 }
-
-/**
- * Raw ASR provider response
- */
-export type AudioTranscriptionResultRaw = { [key: string]: unknown };
-
-export interface AudioTranscriptionResult {
-  /** Transcribed text */
-  text: string;
-  /** Raw ASR provider response */
-  raw?: AudioTranscriptionResultRaw;
-}
-
-export interface ErrorResponse {
-  error: string;
-  details?: string;
-}
-

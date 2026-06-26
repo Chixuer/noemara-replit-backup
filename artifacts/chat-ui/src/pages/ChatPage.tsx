@@ -17,6 +17,7 @@ import {
   Circle,
   Search,
 } from "lucide-react";
+import VoiceRecorder from "../components/VoiceRecorder";
 
 interface Message {
   id: string;
@@ -98,6 +99,7 @@ export default function ChatPage() {
   const [replying, setReplying] = useState(false);
   const [toast, setToast] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -123,10 +125,9 @@ export default function ChatPage() {
   }, [messages, replying, scrollToBottom]);
 
   useEffect(() => {
-    if (toast) {
-      const t = setTimeout(() => setToast(false), 2200);
-      return () => clearTimeout(t);
-    }
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(false), 2200);
+    return () => clearTimeout(t);
   }, [toast]);
 
   useEffect(() => {
@@ -230,6 +231,44 @@ export default function ChatPage() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleVoiceTranscribe = (text: string) => {
+    setIsRecording(false);
+    setInputText(text);
+  };
+
+  const handleVoiceSend = (text: string) => {
+    setIsRecording(false);
+    if (!text.trim()) return;
+
+    const userMsg: Message = { id: generateId(), role: "user", text };
+    const newMessages = [...messages, userMsg];
+    updateActiveMessages(newMessages);
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId && c.title === "新对话"
+          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+          : c.id === activeId
+            ? { ...c, updatedAt: Date.now() }
+            : c,
+      ),
+    );
+
+    setReplying(true);
+    setIsThinking(true);
+
+    setTimeout(() => {
+      setIsThinking(false);
+      const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
+      updateActiveMessages([...newMessages, aiMsg]);
+      setReplying(false);
+    }, 1200);
+  };
+
+  const handleVoiceCancel = () => {
+    setIsRecording(false);
   };
 
   return (
@@ -1232,96 +1271,107 @@ export default function ChatPage() {
               boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
             }}
           >
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 15% 35%)",
-                display: "flex",
-                alignItems: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Plus size={22} strokeWidth={2} />
-            </button>
-
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={inputText ? undefined : "Ask ChatGPT"}
-              style={{
-                flex: 1,
-                fontSize: 15.5,
-                color: "hsl(220 15% 12%)",
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                padding: 0,
-                letterSpacing: 0.1,
-                caretColor: "hsl(142 72% 36%)",
-              }}
-            />
-
-            {!inputText && (
-              <button
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  cursor: "pointer",
-                  color: "hsl(220 15% 35%)",
-                  display: "flex",
-                  alignItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <Mic size={21} strokeWidth={1.8} />
-              </button>
-            )}
-
-            <button
-              style={{
-                background: "hsl(142 72% 36%)",
-                border: "none",
-                borderRadius: "50%",
-                width: 38,
-                height: 38,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                flexShrink: 0,
-                padding: 0,
-                transition: "all 0.2s ease",
-              }}
-              onClick={handleSend}
-            >
-              {inputText ? (
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : (
-                <svg
-                  width="20"
-                  height="14"
-                  viewBox="0 0 20 14"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
+            {isRecording ? (
+              <VoiceRecorder
+                onTranscribe={handleVoiceTranscribe}
+                onSend={handleVoiceSend}
+                onCancel={handleVoiceCancel}
+              />
+            ) : (
+              <>
+                <button
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    color: "hsl(220 15% 35%)",
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0,
+                  }}
                 >
-                  <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
-                  <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                  <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
-                  <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                  <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
-                  <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
-                </svg>
-              )}
-            </button>
+                  <Plus size={22} strokeWidth={2} />
+                </button>
+
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={inputText ? undefined : "Ask ChatGPT"}
+                  style={{
+                    flex: 1,
+                    fontSize: 15.5,
+                    color: "hsl(220 15% 12%)",
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    padding: 0,
+                    letterSpacing: 0.1,
+                    caretColor: "hsl(142 72% 36%)",
+                  }}
+                />
+
+                {!inputText && (
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 15% 35%)",
+                      display: "flex",
+                      alignItems: "center",
+                      flexShrink: 0,
+                    }}
+                    onClick={() => setIsRecording(true)}
+                  >
+                    <Mic size={21} strokeWidth={1.8} />
+                  </button>
+                )}
+
+                <button
+                  style={{
+                    background: "hsl(142 72% 36%)",
+                    border: "none",
+                    borderRadius: "50%",
+                    width: 38,
+                    height: 38,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    padding: 0,
+                    transition: "all 0.2s ease",
+                  }}
+                  onClick={handleSend}
+                >
+                  {inputText ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="20"
+                      height="14"
+                      viewBox="0 0 20 14"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
+                      <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                      <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
+                      <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                      <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
+                      <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
+                    </svg>
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
