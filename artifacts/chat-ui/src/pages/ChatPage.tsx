@@ -13,6 +13,7 @@ import {
   GitBranch,
   RotateCcw,
   Pin,
+  Search,
 } from "lucide-react";
 
 interface Message {
@@ -52,7 +53,7 @@ function createNewConversation(title?: string): Conversation {
   const id = generateId();
   return {
     id,
-    title: title || "\u65b0\u5bf9\u8bdd",
+    title: title || "新对话",
     messages: [],
     pinned: false,
     createdAt: Date.now(),
@@ -61,7 +62,7 @@ function createNewConversation(title?: string): Conversation {
 }
 
 function makeTitleFromMessage(msg: string): string {
-  if (!msg) return "\u65b0\u5bf9\u8bdd";
+  if (!msg) return "新对话";
   const trimmed = msg.trim();
   if (trimmed.length <= 12) return trimmed;
   return trimmed.slice(0, 12) + "...";
@@ -70,9 +71,9 @@ function makeTitleFromMessage(msg: string): string {
 export default function ChatPage() {
   const initialConv: Conversation = {
     id: generateId(),
-    title: "\u54c8\u55bd\u95ee\u5019",
+    title: "哈喽问候",
     messages: [
-      { id: generateId(), role: "user", text: "\u54c8\u55bd" },
+      { id: generateId(), role: "user", text: "哈喽" },
       { id: generateId(), role: "ai", text: AI_RESPONSE },
     ],
     pinned: false,
@@ -83,6 +84,8 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([initialConv]);
   const [activeId, setActiveId] = useState<string>(initialConv.id);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [inputText, setInputText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -95,12 +98,17 @@ export default function ChatPage() {
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const activeConv = conversations.find((c) => c.id === activeId) || conversations[0];
   const messages = activeConv?.messages || [];
 
   const pinnedConvs = conversations.filter((c) => c.pinned);
   const recentConvs = conversations.filter((c) => !c.pinned);
+
+  const filteredConvs = searchQuery.trim()
+    ? conversations.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
 
   const scrollToBottom = useCallback(() => {
     if (chatRef.current) {
@@ -118,6 +126,12 @@ export default function ChatPage() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+
+  useEffect(() => {
+    if (searchOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [searchOpen]);
 
   const updateActiveMessages = (msgs: Message[]) => {
     setConversations((prev) =>
@@ -137,10 +151,9 @@ export default function ChatPage() {
     const newMessages = [...messages, userMsg];
     updateActiveMessages(newMessages);
 
-    // Update title on first message if empty
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === activeId && c.title === "\u65b0\u5bf9\u8bdd"
+        c.id === activeId && c.title === "新对话"
           ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
           : c.id === activeId
             ? { ...c, updatedAt: Date.now() }
@@ -186,6 +199,8 @@ export default function ChatPage() {
   const handleSelectConv = (id: string) => {
     setActiveId(id);
     setSidebarOpen(false);
+    setSearchOpen(false);
+    setSearchQuery("");
   };
 
   const handlePinConv = (id: string) => {
@@ -230,494 +245,706 @@ export default function ChatPage() {
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
       }}
     >
-      {/* Sidebar */}
-      {sidebarOpen && (
-        <>
-          {/* Overlay */}
+      {/* ===== SIDEBAR (fixed behind, visible when main slides) ===== */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: 320,
+          maxWidth: "85vw",
+          zIndex: 1,
+          background: "hsl(0 0% 100%)",
+          display: "flex",
+          flexDirection: "column",
+          padding: "24px 0",
+          overflowY: "auto",
+        }}
+      >
+        {/* Title + Search */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 20px 20px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: "hsl(220 15% 10%)",
+              letterSpacing: -0.5,
+            }}
+          >
+            Noemara
+          </span>
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "hsl(220 15% 20%)",
+              display: "flex",
+              alignItems: "center",
+            }}
+            onClick={() => {
+              setSearchOpen(true);
+              setSidebarOpen(false);
+            }}
+          >
+            <Search size={20} strokeWidth={1.8} />
+          </button>
+        </div>
+
+        {/* Pinned */}
+        {pinnedConvs.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div
+              style={{
+                padding: "0 20px 8px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "hsl(220 9% 55%)",
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              Pinned
+            </div>
+            {pinnedConvs.map((c) => (
+              <button
+                key={c.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "10px 20px",
+                  background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 15,
+                  color: "hsl(220 15% 12%)",
+                  fontWeight: 500,
+                  textAlign: "left",
+                  borderRadius: 0,
+                }}
+                onClick={() => handleSelectConv(c.id)}
+              >
+                <Pin size={16} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)" }} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Recents */}
+        {recentConvs.length > 0 && (
+          <div>
+            <div
+              style={{
+                padding: "0 20px 8px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "hsl(220 9% 55%)",
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              Recents
+            </div>
+            {recentConvs.map((c) => (
+              <button
+                key={c.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  padding: "10px 20px",
+                  background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 15,
+                  color: "hsl(220 15% 12%)",
+                  fontWeight: 500,
+                  textAlign: "left",
+                  borderRadius: 0,
+                }}
+                onClick={() => handleSelectConv(c.id)}
+              >
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===== MAIN CONTENT (slides right when sidebar opens) ===== */}
+      <div
+        className="main-slide"
+        style={{
+          position: "relative",
+          zIndex: 2,
+          background: "hsl(60 8% 96%)",
+          minHeight: "100svh",
+          display: "flex",
+          flexDirection: "column",
+          transform: sidebarOpen ? "translateX(300px)" : "translateX(0)",
+          transition: "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)",
+          boxShadow: sidebarOpen ? "-4px 0 24px rgba(0,0,0,0.08)" : "none",
+        }}
+        onClick={() => {
+          if (sidebarOpen) setSidebarOpen(false);
+        }}
+      >
+        {/* Overlay dim when sidebar open */}
+        {sidebarOpen && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 50,
+              background: "rgba(0,0,0,0.08)",
+              pointerEvents: "auto",
+            }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Toast: Message copied */}
+        {toast && (
+          <div
+            className="anim-toast-in"
+            style={{
+              position: "fixed",
+              top: 56,
+              left: 18,
+              right: 18,
+              zIndex: 60,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              background: "hsl(0 0% 100%)",
+              borderRadius: 24,
+              padding: "10px 16px",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
+              maxWidth: 430,
+              margin: "0 auto",
+            }}
+          >
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "hsl(220 9% 55%)",
+                display: "flex",
+                alignItems: "center",
+                flexShrink: 0,
+              }}
+              onClick={() => setToast(false)}
+            >
+              <X size={16} strokeWidth={2.2} />
+            </button>
+            <span style={{ fontSize: 14, fontWeight: 500, color: "hsl(220 15% 10%)" }}>
+              Message copied
+            </span>
+          </div>
+        )}
+
+        {/* Model Selector Overlay */}
+        {modelOpen && (
           <div
             className="anim-overlay"
             style={{
               position: "fixed",
               inset: 0,
               zIndex: 50,
-              background: "rgba(0,0,0,0.15)",
-            }}
-            onClick={() => setSidebarOpen(false)}
-          />
-          {/* Drawer */}
-          <div
-            className="anim-slide-right"
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              bottom: 0,
-              zIndex: 55,
-              width: 320,
-              maxWidth: "85vw",
-              background: "hsl(0 0% 100%)",
+              background: "rgba(0,0,0,0.12)",
               display: "flex",
-              flexDirection: "column",
-              padding: "24px 0",
-              boxShadow: "4px 0 24px rgba(0,0,0,0.08)",
+              justifyContent: "center",
+              alignItems: "flex-start",
+              paddingTop: 72,
             }}
+            onClick={() => setModelOpen(false)}
           >
-            {/* Title */}
             <div
+              className="anim-slide-down"
               style={{
-                padding: "0 20px 20px",
-                fontSize: 22,
-                fontWeight: 700,
-                color: "hsl(220 15% 10%)",
-                letterSpacing: -0.5,
+                background: "hsl(0 0% 100%)",
+                borderRadius: 20,
+                padding: "18px 0",
+                width: 260,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              Noemara
-            </div>
-
-            {/* Pinned */}
-            {pinnedConvs.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div
-                  style={{
-                    padding: "0 20px 8px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "hsl(220 9% 55%)",
-                    textTransform: "uppercase",
-                    letterSpacing: 0.8,
-                  }}
-                >
-                  Pinned
-                </div>
-                {pinnedConvs.map((c) => (
-                  <button
-                    key={c.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      width: "100%",
-                      padding: "10px 20px",
-                      background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 15,
-                      color: "hsl(220 15% 12%)",
-                      fontWeight: 500,
-                      textAlign: "left",
-                      borderRadius: 0,
-                    }}
-                    onClick={() => handleSelectConv(c.id)}
-                  >
-                    <Pin size={16} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)" }} />
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.title}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Recents */}
-            {recentConvs.length > 0 && (
-              <div>
-                <div
-                  style={{
-                    padding: "0 20px 8px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "hsl(220 9% 55%)",
-                    textTransform: "uppercase",
-                    letterSpacing: 0.8,
-                  }}
-                >
-                  Recents
-                </div>
-                {recentConvs.map((c) => (
-                  <button
-                    key={c.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      width: "100%",
-                      padding: "10px 20px",
-                      background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 15,
-                      color: "hsl(220 15% 12%)",
-                      fontWeight: 500,
-                      textAlign: "left",
-                      borderRadius: 0,
-                    }}
-                    onClick={() => handleSelectConv(c.id)}
-                  >
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.title}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Toast: Message copied */}
-      {toast && (
-        <div
-          className="anim-toast-in"
-          style={{
-            position: "fixed",
-            top: 56,
-            left: 18,
-            right: 18,
-            zIndex: 60,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            background: "hsl(0 0% 100%)",
-            borderRadius: 24,
-            padding: "10px 16px",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
-            maxWidth: 430,
-            margin: "0 auto",
-          }}
-        >
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 9% 55%)",
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
-            onClick={() => setToast(false)}
-          >
-            <X size={16} strokeWidth={2.2} />
-          </button>
-          <span style={{ fontSize: 14, fontWeight: 500, color: "hsl(220 15% 10%)" }}>
-            Message copied
-          </span>
-        </div>
-      )}
-
-      {/* Model Selector Overlay */}
-      {modelOpen && (
-        <div
-          className="anim-overlay"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 50,
-            background: "rgba(0,0,0,0.12)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            paddingTop: 72,
-          }}
-          onClick={() => setModelOpen(false)}
-        >
-          <div
-            className="anim-slide-down"
-            style={{
-              background: "hsl(0 0% 100%)",
-              borderRadius: 20,
-              padding: "18px 0",
-              width: 260,
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                width: "100%",
-                padding: "0 20px 12px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                borderBottom: "1px solid hsl(0 0% 92%)",
-                fontSize: 17,
-                fontWeight: 600,
-                color: "hsl(220 15% 10%)",
-                letterSpacing: -0.3,
-              }}
-            >
-              <span>GPT-5.5</span>
-              <ChevronRight size={16} strokeWidth={2.2} style={{ color: "hsl(220 9% 55%)" }} />
-            </button>
-            <div
-              style={{
-                padding: "12px 20px 6px",
-                fontSize: 13,
-                color: "hsl(220 9% 55%)",
-                fontWeight: 500,
-                letterSpacing: 0.2,
-              }}
-            >
-              Intelligence
-            </div>
-            {MODELS.map((m) => (
               <button
-                key={m.value}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   width: "100%",
-                  padding: "10px 20px",
+                  padding: "0 20px 12px",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
-                  fontSize: 16,
-                  fontWeight: selectedModel === m.value ? 600 : 400,
-                  color: selectedModel === m.value ? "hsl(220 15% 10%)" : "hsl(220 15% 25%)",
-                }}
-                onClick={() => {
-                  setSelectedModel(m.value);
-                  setModelOpen(false);
-                }}
-              >
-                <span>{m.label}</span>
-                {selectedModel === m.value && (
-                  <Check size={18} strokeWidth={2.5} style={{ color: "hsl(220 15% 15%)" }} />
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Top Nav */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "14px 18px 10px",
-          background: "hsl(60 8% 96%)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 15% 20%)",
-              display: "flex",
-              alignItems: "center",
-            }}
-            onClick={() => setSidebarOpen(true)}
-          >
-            <AlignLeft size={22} strokeWidth={1.8} />
-          </button>
-
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-            }}
-            onClick={() => setModelOpen(true)}
-          >
-            <span
-              style={{
-                fontSize: 17,
-                fontWeight: 600,
-                color: "hsl(220 15% 12%)",
-                letterSpacing: -0.3,
-              }}
-            >
-              Thinking
-            </span>
-            <ChevronRight
-              size={16}
-              strokeWidth={2.2}
-              style={{ color: "hsl(220 15% 40%)", marginTop: 1 }}
-            />
-          </button>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 15% 20%)",
-              display: "flex",
-              alignItems: "center",
-            }}
-            onClick={handleNewChat}
-          >
-            <SquarePen size={21} strokeWidth={1.8} />
-          </button>
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 15% 20%)",
-              display: "flex",
-              alignItems: "center",
-            }}
-            onClick={() => setTopMenuOpen(!topMenuOpen)}
-          >
-            <MoreHorizontal size={22} strokeWidth={1.8} />
-          </button>
-
-          {/* Top-right menu popup */}
-          {topMenuOpen && (
-            <div
-              className="anim-fade-in-scale"
-              style={{
-                position: "absolute",
-                top: 36,
-                right: -6,
-                zIndex: 40,
-                background: "hsl(0 0% 100%)",
-                borderRadius: 18,
-                padding: "10px 0",
-                width: 200,
-                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-              }}
-            >
-              <button
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  width: "100%",
-                  padding: "10px 16px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 15,
+                  borderBottom: "1px solid hsl(0 0% 92%)",
+                  fontSize: 17,
+                  fontWeight: 600,
                   color: "hsl(220 15% 10%)",
-                  fontWeight: 500,
-                  textAlign: "left",
-                }}
-                onClick={() => {
-                  handlePinConv(activeId);
-                  setTopMenuOpen(false);
+                  letterSpacing: -0.3,
                 }}
               >
-                <Pin size={18} strokeWidth={1.8} />
-                {activeConv.pinned ? "Unpin" : "Pin"}
+                <span>GPT-5.5</span>
+                <ChevronRight size={16} strokeWidth={2.2} style={{ color: "hsl(220 9% 55%)" }} />
               </button>
-              <button
+              <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  width: "100%",
-                  padding: "10px 16px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 15,
-                  color: "hsl(0 70% 55%)",
+                  padding: "12px 20px 6px",
+                  fontSize: 13,
+                  color: "hsl(220 9% 55%)",
                   fontWeight: 500,
-                  textAlign: "left",
-                }}
-                onClick={() => {
-                  setTopMenuOpen(false);
-                  handleDeleteConv(activeId);
+                  letterSpacing: 0.2,
                 }}
               >
-                <Trash2 size={18} strokeWidth={1.8} />
-                Delete
-              </button>
+                Intelligence
+              </div>
+              {MODELS.map((m) => (
+                <button
+                  key={m.value}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
+                    padding: "10px 20px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    fontWeight: selectedModel === m.value ? 600 : 400,
+                    color: selectedModel === m.value ? "hsl(220 15% 10%)" : "hsl(220 15% 25%)",
+                  }}
+                  onClick={() => {
+                    setSelectedModel(m.value);
+                    setModelOpen(false);
+                  }}
+                >
+                  <span>{m.label}</span>
+                  {selectedModel === m.value && (
+                    <Check size={18} strokeWidth={2.5} style={{ color: "hsl(220 15% 15%)" }} />
+                  )}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Chat Area */}
-      <div
-        ref={chatRef}
-        style={{
-          flex: 1,
-          padding: "8px 18px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 18,
-          overflowY: "auto",
-        }}
-      >
-        {messages.length === 0 ? (
+        {/* Search Overlay */}
+        {searchOpen && (
           <div
             style={{
-              flex: 1,
+              position: "fixed",
+              inset: 0,
+              zIndex: 60,
+              background: "hsl(0 0% 100%)",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "hsl(220 9% 55%)",
-              fontSize: 14,
-              fontStyle: "italic",
+              flexDirection: "column",
+              padding: "24px 20px",
             }}
           >
-            Start a new conversation
+            {/* Search header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+              <button
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "hsl(220 15% 20%)",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                onClick={() => {
+                  setSearchOpen(false);
+                  setSearchQuery("");
+                }}
+              >
+                <X size={22} strokeWidth={1.8} />
+              </button>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索对话"
+                style={{
+                  flex: 1,
+                  fontSize: 17,
+                  color: "hsl(220 15% 12%)",
+                  border: "none",
+                  outline: "none",
+                  background: "transparent",
+                  padding: "8px 0",
+                  letterSpacing: 0.1,
+                }}
+              />
+            </div>
+
+            {/* Search results */}
+            {searchQuery.trim() && (
+              <div>
+                {filteredConvs.length === 0 ? (
+                  <div style={{ color: "hsl(220 9% 55%)", fontSize: 14, textAlign: "center", padding: 40 }}>
+                    未找到匹配的对话
+                  </div>
+                ) : (
+                  filteredConvs.map((c) => (
+                    <button
+                      key={c.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        width: "100%",
+                        padding: "12px 0",
+                        background: "none",
+                        border: "none",
+                        borderBottom: "1px solid hsl(0 0% 92%)",
+                        cursor: "pointer",
+                        fontSize: 15,
+                        color: "hsl(220 15% 12%)",
+                        fontWeight: 500,
+                        textAlign: "left",
+                      }}
+                      onClick={() => handleSelectConv(c.id)}
+                    >
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {c.title}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
-        ) : (
-          messages.map((msg) => {
-            if (msg.role === "user") {
+        )}
+
+        {/* Top Nav */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "14px 18px 10px",
+            background: "hsl(60 8% 96%)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "hsl(220 15% 20%)",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onClick={() => setSidebarOpen(true)}
+            >
+              <AlignLeft size={22} strokeWidth={1.8} />
+            </button>
+
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+              }}
+              onClick={() => setModelOpen(true)}
+            >
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 600,
+                  color: "hsl(220 15% 12%)",
+                  letterSpacing: -0.3,
+                }}
+              >
+                Thinking
+              </span>
+              <ChevronRight
+                size={16}
+                strokeWidth={2.2}
+                style={{ color: "hsl(220 15% 40%)", marginTop: 1 }}
+              />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "hsl(220 15% 20%)",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onClick={handleNewChat}
+            >
+              <SquarePen size={21} strokeWidth={1.8} />
+            </button>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "hsl(220 15% 20%)",
+                display: "flex",
+                alignItems: "center",
+              }}
+              onClick={() => setTopMenuOpen(!topMenuOpen)}
+            >
+              <MoreHorizontal size={22} strokeWidth={1.8} />
+            </button>
+
+            {/* Top-right menu popup */}
+            {topMenuOpen && (
+              <div
+                className="anim-fade-in-scale"
+                style={{
+                  position: "absolute",
+                  top: 36,
+                  right: -6,
+                  zIndex: 40,
+                  background: "hsl(0 0% 100%)",
+                  borderRadius: 18,
+                  padding: "10px 0",
+                  width: 200,
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                }}
+              >
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    width: "100%",
+                    padding: "10px 16px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 15,
+                    color: "hsl(220 15% 10%)",
+                    fontWeight: 500,
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    handlePinConv(activeId);
+                    setTopMenuOpen(false);
+                  }}
+                >
+                  <Pin size={18} strokeWidth={1.8} />
+                  {activeConv.pinned ? "Unpin" : "Pin"}
+                </button>
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    width: "100%",
+                    padding: "10px 16px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 15,
+                    color: "hsl(0 70% 55%)",
+                    fontWeight: 500,
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    setTopMenuOpen(false);
+                    handleDeleteConv(activeId);
+                  }}
+                >
+                  <Trash2 size={18} strokeWidth={1.8} />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Chat Area */}
+        <div
+          ref={chatRef}
+          style={{
+            flex: 1,
+            padding: "8px 18px 24px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+            overflowY: "auto",
+          }}
+        >
+          {messages.length === 0 ? (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "hsl(220 9% 55%)",
+                fontSize: 14,
+                fontStyle: "italic",
+              }}
+            >
+              Start a new conversation
+            </div>
+          ) : (
+            messages.map((msg) => {
+              if (msg.role === "user") {
+                return (
+                  <div
+                    key={msg.id}
+                    className="anim-fade-in"
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      position: "relative",
+                    }}
+                    onClick={() =>
+                      setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                    }
+                  >
+                    <div
+                      style={{
+                        background: "hsl(142 55% 72%)",
+                        color: "hsl(142 40% 15%)",
+                        borderRadius: "20px 20px 6px 20px",
+                        padding: "10px 16px",
+                        fontSize: 16,
+                        fontWeight: 500,
+                        maxWidth: "70%",
+                        letterSpacing: 0.1,
+                        cursor: "pointer",
+                        userSelect: "none",
+                      }}
+                    >
+                      {msg.text}
+                    </div>
+                    {activeMsgId === msg.id && (
+                      <div
+                        className="anim-fade-in-scale"
+                        style={{
+                          position: "absolute",
+                          top: -34,
+                          right: 0,
+                          display: "flex",
+                          gap: 6,
+                        }}
+                      >
+                        <button
+                          style={{
+                            background: "hsl(0 0% 20%)",
+                            border: "none",
+                            borderRadius: 18,
+                            padding: "6px 12px",
+                            color: "#fff",
+                            fontSize: 13,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(msg.id);
+                          }}
+                        >
+                          <Trash2 size={13} strokeWidth={2} />
+                          删除
+                        </button>
+                        <button
+                          style={{
+                            background: "hsl(0 0% 20%)",
+                            border: "none",
+                            borderRadius: "50%",
+                            width: 28,
+                            height: 28,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            color: "#fff",
+                            padding: 0,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveMsgId(null);
+                          }}
+                        >
+                          <X size={14} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={msg.id}
                   className="anim-fade-in"
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    position: "relative",
-                  }}
-                  onClick={() =>
-                    setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                  }
+                  style={{ display: "flex", flexDirection: "column", gap: 10 }}
                 >
-                  <div
+                  <p
                     style={{
-                      background: "hsl(142 55% 72%)",
-                      color: "hsl(142 40% 15%)",
-                      borderRadius: "20px 20px 6px 20px",
-                      padding: "10px 16px",
-                      fontSize: 16,
-                      fontWeight: 500,
-                      maxWidth: "70%",
-                      letterSpacing: 0.1,
-                      cursor: "pointer",
-                      userSelect: "none",
+                      margin: 0,
+                      fontSize: 14,
+                      color: "hsl(220 9% 60%)",
+                      fontStyle: "italic",
+                      paddingLeft: 2,
                     }}
                   >
+                    Thought for a second
+                  </p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 16,
+                      color: "hsl(220 15% 12%)",
+                      lineHeight: 1.6,
+                      letterSpacing: 0.1,
+                    }}
+                    onClick={() =>
+                      setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                    }
+                  >
                     {msg.text}
-                  </div>
+                  </p>
                   {activeMsgId === msg.id && (
-                    <div
-                      className="anim-fade-in-scale"
-                      style={{
-                        position: "absolute",
-                        top: -34,
-                        right: 0,
-                        display: "flex",
-                        gap: 6,
-                      }}
-                    >
+                    <div className="anim-fade-in-scale" style={{ display: "flex", gap: 6, marginTop: -6 }}>
                       <button
                         style={{
                           background: "hsl(0 0% 20%)",
@@ -730,7 +957,6 @@ export default function ChatPage() {
                           alignItems: "center",
                           gap: 4,
                           cursor: "pointer",
-                          whiteSpace: "nowrap",
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -763,272 +989,155 @@ export default function ChatPage() {
                       </button>
                     </div>
                   )}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 20,
+                      marginTop: 4,
+                      position: "relative",
+                    }}
+                  >
+                    <button
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      onClick={() => handleCopy(msg.id, msg.text)}
+                    >
+                      {copiedMsgId === msg.id ? (
+                        <Check size={18} strokeWidth={2.5} />
+                      ) : (
+                        <Copy size={18} strokeWidth={1.7} />
+                      )}
+                    </button>
+                    <button
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        color: "hsl(220 9% 55%)",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      onClick={() =>
+                        setMenuMsgId(menuMsgId === msg.id ? null : msg.id)
+                      }
+                    >
+                      <MoreHorizontal size={18} strokeWidth={1.7} />
+                    </button>
+                    {menuMsgId === msg.id && (
+                      <div
+                        className="anim-fade-in-scale"
+                        style={{
+                          position: "absolute",
+                          top: 28,
+                          left: 20,
+                          zIndex: 10,
+                          background: "hsl(0 0% 100%)",
+                          borderRadius: 16,
+                          padding: "14px 0",
+                          width: 240,
+                          boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "0 16px 6px",
+                            fontSize: 13,
+                            color: "hsl(220 9% 55%)",
+                            fontWeight: 500,
+                            textAlign: "left",
+                            letterSpacing: 0.2,
+                          }}
+                        >
+                          {formatTime()}
+                        </div>
+                        <button
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            width: "100%",
+                            padding: "10px 16px",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: 15,
+                            color: "hsl(220 15% 10%)",
+                            fontWeight: 500,
+                            textAlign: "left",
+                          }}
+                        >
+                          <GitBranch size={18} strokeWidth={1.8} />
+                          Branch in new chat
+                        </button>
+                        <div
+                          style={{ height: 1, background: "hsl(0 0% 92%)", margin: "4px 16px" }}
+                        />
+                        <div
+                          style={{
+                            padding: "6px 16px",
+                            fontSize: 13,
+                            color: "hsl(220 9% 55%)",
+                            fontWeight: 500,
+                            letterSpacing: 0.2,
+                          }}
+                        >
+                          Used 5.5 Thinking
+                        </div>
+                        <button
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            width: "100%",
+                            padding: "10px 16px",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: 15,
+                            color: "hsl(220 15% 10%)",
+                            fontWeight: 500,
+                            textAlign: "left",
+                          }}
+                        >
+                          <RotateCcw size={18} strokeWidth={1.8} />
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
-            }
+            })
+          )}
+        </div>
 
-            return (
-              <div
-                key={msg.id}
-                className="anim-fade-in"
-                style={{ display: "flex", flexDirection: "column", gap: 10 }}
-              >
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 14,
-                    color: "hsl(220 9% 60%)",
-                    fontStyle: "italic",
-                    paddingLeft: 2,
-                  }}
-                >
-                  Thought for a second
-                </p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 16,
-                    color: "hsl(220 15% 12%)",
-                    lineHeight: 1.6,
-                    letterSpacing: 0.1,
-                  }}
-                  onClick={() =>
-                    setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                  }
-                >
-                  {msg.text}
-                </p>
-                {activeMsgId === msg.id && (
-                  <div className="anim-fade-in-scale" style={{ display: "flex", gap: 6, marginTop: -6 }}>
-                    <button
-                      style={{
-                        background: "hsl(0 0% 20%)",
-                        border: "none",
-                        borderRadius: 18,
-                        padding: "6px 12px",
-                        color: "#fff",
-                        fontSize: 13,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        cursor: "pointer",
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(msg.id);
-                      }}
-                    >
-                      <Trash2 size={13} strokeWidth={2} />
-                      删除
-                    </button>
-                    <button
-                      style={{
-                        background: "hsl(0 0% 20%)",
-                        border: "none",
-                        borderRadius: "50%",
-                        width: 28,
-                        height: 28,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        color: "#fff",
-                        padding: 0,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMsgId(null);
-                      }}
-                    >
-                      <X size={14} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                )}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 20,
-                    marginTop: 4,
-                    position: "relative",
-                  }}
-                >
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                    onClick={() => handleCopy(msg.id, msg.text)}
-                  >
-                    {copiedMsgId === msg.id ? (
-                      <Check size={18} strokeWidth={2.5} />
-                    ) : (
-                      <Copy size={18} strokeWidth={1.7} />
-                    )}
-                  </button>
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                    onClick={() =>
-                      setMenuMsgId(menuMsgId === msg.id ? null : msg.id)
-                    }
-                  >
-                    <MoreHorizontal size={18} strokeWidth={1.7} />
-                  </button>
-                  {menuMsgId === msg.id && (
-                    <div
-                      className="anim-fade-in-scale"
-                      style={{
-                        position: "absolute",
-                        top: 28,
-                        left: 20,
-                        zIndex: 10,
-                        background: "hsl(0 0% 100%)",
-                        borderRadius: 16,
-                        padding: "14px 0",
-                        width: 240,
-                        boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: "0 16px 6px",
-                          fontSize: 13,
-                          color: "hsl(220 9% 55%)",
-                          fontWeight: 500,
-                          textAlign: "left",
-                          letterSpacing: 0.2,
-                        }}
-                      >
-                        {formatTime()}
-                      </div>
-                      <button
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 12,
-                          width: "100%",
-                          padding: "10px 16px",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          fontSize: 15,
-                          color: "hsl(220 15% 10%)",
-                          fontWeight: 500,
-                          textAlign: "left",
-                        }}
-                      >
-                        <GitBranch size={18} strokeWidth={1.8} />
-                        Branch in new chat
-                      </button>
-                      <div
-                        style={{ height: 1, background: "hsl(0 0% 92%)", margin: "4px 16px" }}
-                      />
-                      <div
-                        style={{
-                          padding: "6px 16px",
-                          fontSize: 13,
-                          color: "hsl(220 9% 55%)",
-                          fontWeight: 500,
-                          letterSpacing: 0.2,
-                        }}
-                      >
-                        Used 5.5 Thinking
-                      </div>
-                      <button
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 12,
-                          width: "100%",
-                          padding: "10px 16px",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          fontSize: 15,
-                          color: "hsl(220 15% 10%)",
-                          fontWeight: 500,
-                          textAlign: "left",
-                        }}
-                      >
-                        <RotateCcw size={18} strokeWidth={1.8} />
-                        Retry
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Bottom Input Bar */}
-      <div
-        style={{
-          padding: "10px 14px 28px",
-          background: "hsl(60 8% 96%)",
-        }}
-      >
+        {/* Bottom Input Bar */}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            background: "hsl(0 0% 100%)",
-            borderRadius: 28,
-            padding: "10px 10px 10px 16px",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+            padding: "10px 14px 28px",
+            background: "hsl(60 8% 96%)",
           }}
         >
-          <button
+          <div
             style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 15% 35%)",
               display: "flex",
               alignItems: "center",
-              flexShrink: 0,
+              gap: 10,
+              background: "hsl(0 0% 100%)",
+              borderRadius: 28,
+              padding: "10px 10px 10px 16px",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
             }}
           >
-            <Plus size={22} strokeWidth={2} />
-          </button>
-
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={inputText ? undefined : "Ask ChatGPT"}
-            style={{
-              flex: 1,
-              fontSize: 15.5,
-              color: "hsl(220 15% 12%)",
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              padding: 0,
-              letterSpacing: 0.1,
-              caretColor: "hsl(142 72% 36%)",
-            }}
-          />
-
-          {!inputText && (
             <button
               style={{
                 background: "none",
@@ -1041,48 +1150,85 @@ export default function ChatPage() {
                 flexShrink: 0,
               }}
             >
-              <Mic size={21} strokeWidth={1.8} />
+              <Plus size={22} strokeWidth={2} />
             </button>
-          )}
 
-          <button
-            style={{
-              background: "hsl(142 72% 36%)",
-              border: "none",
-              borderRadius: "50%",
-              width: 38,
-              height: 38,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              flexShrink: 0,
-              padding: 0,
-              transition: "all 0.2s ease",
-            }}
-            onClick={handleSend}
-          >
-            {inputText ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <svg
-                width="20"
-                height="14"
-                viewBox="0 0 20 14"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={inputText ? undefined : "Ask ChatGPT"}
+              style={{
+                flex: 1,
+                fontSize: 15.5,
+                color: "hsl(220 15% 12%)",
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                padding: 0,
+                letterSpacing: 0.1,
+                caretColor: "hsl(142 72% 36%)",
+              }}
+            />
+
+            {!inputText && (
+              <button
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "hsl(220 15% 35%)",
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                }}
               >
-                <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
-                <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
-                <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
-                <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
-              </svg>
+                <Mic size={21} strokeWidth={1.8} />
+              </button>
             )}
-          </button>
+
+            <button
+              style={{
+                background: "hsl(142 72% 36%)",
+                border: "none",
+                borderRadius: "50%",
+                width: 38,
+                height: 38,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                flexShrink: 0,
+                padding: 0,
+                transition: "all 0.2s ease",
+              }}
+              onClick={handleSend}
+            >
+              {inputText ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg
+                  width="20"
+                  height="14"
+                  viewBox="0 0 20 14"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
+                  <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                  <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
+                  <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                  <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
+                  <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
