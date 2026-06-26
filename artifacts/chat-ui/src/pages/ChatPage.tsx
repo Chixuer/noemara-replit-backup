@@ -542,8 +542,8 @@ export default function ChatPage() {
           if (sidebarOpen) setSidebarOpen(false);
         }}
       >
-        {/* Overlay dim when sidebar open */}
-        {sidebarOpen && (
+        {/* Overlay dim when sidebar or search open */}
+        {(sidebarOpen || searchOpen) && (
           <div
             style={{
               position: "absolute",
@@ -552,7 +552,13 @@ export default function ChatPage() {
               background: "rgba(0,0,0,0.08)",
               pointerEvents: "auto",
             }}
-            onClick={() => setSidebarOpen(false)}
+            onClick={() => {
+              if (sidebarOpen) setSidebarOpen(false);
+              if (searchOpen) {
+                setSearchOpen(false);
+                setSearchQuery("");
+              }
+            }}
           />
         )}
 
@@ -857,14 +863,50 @@ export default function ChatPage() {
               style={{
                 flex: 1,
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "hsl(220 9% 55%)",
-                fontSize: 14,
-                fontStyle: "italic",
+                padding: "0 24px",
+                textAlign: "center",
               }}
             >
-              Start a new conversation
+              {/* Sparkle icon */}
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="hsl(220 9% 55%)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ marginBottom: 20, opacity: 0.55 }}
+              >
+                <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5z" />
+              </svg>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 550,
+                  color: "hsl(220 15% 18%)",
+                  letterSpacing: 0.8,
+                  lineHeight: 1.4,
+                  marginBottom: 12,
+                }}
+              >
+                让未曾落笔的思绪，在此慢慢成诗。
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 400,
+                  color: "hsl(220 9% 55%)",
+                  letterSpacing: 0.3,
+                  lineHeight: 1.5,
+                }}
+              >
+                从一个问题、一张图片，或一段尚未说完的话开始。
+              </div>
             </div>
           ) : (
             messages.map((msg) => {
