@@ -1296,7 +1296,6 @@ export default function ChatPage() {
               borderRadius: 28,
               boxShadow: "0 1px 6px rgba(0,0,0,0.07)",
               minHeight: 58,
-              overflow: "hidden",
             }}
           >
             {/* ── Input layer ── */}
