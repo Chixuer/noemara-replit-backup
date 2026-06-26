@@ -219,6 +219,13 @@ export default function VoiceRecorder({
   };
 
   const handleCancel = useCallback(() => {
+    // If an error occurred after stopping, the recorder is already stopped but
+    // the user still needs a way to dismiss the error UI.
+    if (status === "error") {
+      onCancel();
+      return;
+    }
+
     if (stoppedRef.current) return;
     stoppedRef.current = true;
 
@@ -229,7 +236,7 @@ export default function VoiceRecorder({
     mediaRecorderRef.current?.stop();
 
     onCancel();
-  }, [onCancel]);
+  }, [onCancel, status]);
 
   return (
     <div

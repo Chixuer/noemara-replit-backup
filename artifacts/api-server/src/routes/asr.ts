@@ -6,7 +6,7 @@ import {
 
 const ASR_API_URL =
   process.env.DASHSCOPE_ASR_URL ??
-  "https://dashscope.aliyuncs.com/api/v1/services/audio/asr/transcription";
+  "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
 const ASR_API_KEY = process.env.DASHSCOPE_API_KEY;
 
@@ -45,6 +45,14 @@ function extractText(raw: unknown): string {
 
   const r = raw as Record<string, unknown>;
 
+  if (Array.isArray(r.choices)) {
+    const first = r.choices[0];
+    if (first && typeof first.message === "object" && first.message != null) {
+      const message = first.message as Record<string, unknown>;
+      if (typeof message.content === "string") return message.content;
+    }
+  }
+
   if (typeof r.text === "string") return r.text;
   if (typeof r.transcription === "string") return r.transcription;
 
@@ -52,14 +60,6 @@ function extractText(raw: unknown): string {
     const output = r.output as Record<string, unknown>;
     if (typeof output.text === "string") return output.text;
     if (typeof output.transcription === "string") return output.transcription;
-  }
-
-  if (Array.isArray(r.choices)) {
-    const first = r.choices[0];
-    if (first && typeof first.message === "object" && first.message != null) {
-      const message = first.message as Record<string, unknown>;
-      if (typeof message.content === "string") return message.content;
-    }
   }
 
   return "";
@@ -99,30 +99,50 @@ router.post("/asr/transcribe", async (req, res): Promise<void> => {
     return;
   }
 
-  const formData = new FormData();
   const mimeType = formatToMimeType(format);
-  const extension = format && format.trim() ? format : "webm";
-  const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType });
-  formData.append("file", blob, `recording.${extension}`);
-  formData.append("model", "qwen3-asr-flash");
-  formData.append(
-    "hotwords",
-    hotwords && hotwords.trim() ? hotwords : DEFAULT_HOTWORDS,
-  );
+  const dataUri = `data:${mimeType};base64,${audioBuffer.toString("base64")}`;
+
+  const payload: Record<string, unknown> = {
+    model: "qwen3-asr-flash",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_audio",
+            input_audio: {
+              data: dataUri,
+            },
+          },
+        ],
+      },
+    ],
+    stream: false,
+    asr_options: {
+      enable_itn: false,
+      corpus: {
+        text: hotwords && hotwords.trim() ? hotwords : DEFAULT_HOTWORDS,
+      },
+    },
+  };
 
   try {
     const response = await fetch(ASR_API_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${ASR_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      body: formData,
+      body: JSON.stringify(payload),
     });
 
-    const raw = await response.json().catch(async () => {
-      const text = await response.text();
-      return { error: text };
-    });
+    const bodyText = await response.text();
+    let raw: unknown;
+    try {
+      raw = bodyText ? JSON.parse(bodyText) : null;
+    } catch {
+      raw = { error: bodyText };
+    }
 
     if (!response.ok) {
       req.log.error(
@@ -136,7 +156,7 @@ router.post("/asr/transcribe", async (req, res): Promise<void> => {
           raw != null &&
           "error" in (raw as Record<string, unknown>)
             ? String((raw as Record<string, unknown>).error)
-            : undefined,
+            : bodyText || undefined,
       });
       return;
     }

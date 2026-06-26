@@ -1,0 +1,1 @@
+- [DashScope Qwen ASR payload format](dashscope-qwen-asr-format.md) — qwen3-asr-flash uses the OpenAI-compatible chat completions endpoint with `input_audio` data URIs, not the native `/services/audio/asr/transcription` endpoint.
