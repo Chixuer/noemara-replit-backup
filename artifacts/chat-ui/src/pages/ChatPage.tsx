@@ -20,7 +20,7 @@ interface Message {
   text: string;
 }
 
-const AI_RESPONSE = "哈喽，Chi Xu！\ud83d\udc4b \u4eca\u5929\u60f3\u641e\u5b66\u4e60\u3001\u505a\u5e94\u7528\uff0c\u8fd8\u662f\u804a\u70b9\u522b\u7684\uff1f";
+const AI_RESPONSE = "哈喽，Chi Xu！👋 今天想搞学习、做应用，还是聊点别的？";
 
 const MODELS = [
   { label: "Flash", value: "flash" },
@@ -38,6 +38,12 @@ function formatTime() {
   return `Today, ${h}:${m}`;
 }
 
+function triggerVibrate() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate(15);
+  }
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     { id: generateId(), role: "user", text: "\u54c8\u55bd" },
@@ -50,6 +56,7 @@ export default function ChatPage() {
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
+  const [toast, setToast] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +70,13 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages, replying, scrollToBottom]);
 
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(false), 2200);
+      return () => clearTimeout(t);
+    }
+  }, [toast]);
+
   const handleSend = () => {
     const text = inputText.trim();
     if (!text) return;
@@ -73,7 +87,6 @@ export default function ChatPage() {
     setReplying(true);
     setIsThinking(true);
 
-    // Simulate AI thinking + reply
     setTimeout(() => {
       setIsThinking(false);
       const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
@@ -89,6 +102,8 @@ export default function ChatPage() {
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
+    triggerVibrate();
+    setToast(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -112,9 +127,58 @@ export default function ChatPage() {
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
       }}
     >
+      {/* Toast: Message copied */}
+      {toast && (
+        <div
+          className="anim-toast-in"
+          style={{
+            position: "fixed",
+            top: 56,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            background: "hsl(0 0% 100%)",
+            borderRadius: 24,
+            padding: "10px 16px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            maxWidth: "90%",
+            width: "auto",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "hsl(220 9% 55%)",
+              display: "flex",
+              alignItems: "center",
+            }}
+            onClick={() => setToast(false)}
+          >
+            <X size={16} strokeWidth={2.2} />
+          </button>
+          <span
+            style={{
+              fontSize: 14,
+              fontWeight: 500,
+              color: "hsl(220 15% 10%)",
+            }}
+          >
+            Message copied
+          </span>
+        </div>
+      )}
+
       {/* Model Selector Overlay */}
       {modelOpen && (
         <div
+          className="anim-overlay"
           style={{
             position: "fixed",
             inset: 0,
@@ -128,6 +192,7 @@ export default function ChatPage() {
           onClick={() => setModelOpen(false)}
         >
           <div
+            className="anim-slide-down"
             style={{
               background: "hsl(0 0% 100%)",
               borderRadius: 20,
@@ -224,7 +289,6 @@ export default function ChatPage() {
           background: "hsl(60 8% 96%)",
         }}
       >
-        {/* Left: hamburger + title */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <button
             style={{
@@ -270,7 +334,6 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* Right: edit + more */}
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <button
             style={{
@@ -318,6 +381,7 @@ export default function ChatPage() {
             return (
               <div
                 key={msg.id}
+                className="anim-fade-in"
                 style={{
                   display: "flex",
                   justifyContent: "flex-end",
@@ -347,6 +411,7 @@ export default function ChatPage() {
                 {/* Delete bubble */}
                 {activeMsgId === msg.id && (
                   <div
+                    className="anim-fade-in-scale"
                     style={{
                       position: "absolute",
                       top: -34,
@@ -408,6 +473,7 @@ export default function ChatPage() {
           return (
             <div
               key={msg.id}
+              className="anim-fade-in"
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
               {/* Thinking label */}
@@ -441,7 +507,10 @@ export default function ChatPage() {
 
               {/* Delete / actions on click message */}
               {activeMsgId === msg.id && (
-                <div style={{ display: "flex", gap: 6, marginTop: -6 }}>
+                <div
+                  className="anim-fade-in-scale"
+                  style={{ display: "flex", gap: 6, marginTop: -6 }}
+                >
                   <button
                     style={{
                       background: "hsl(0 0% 20%)",
@@ -534,6 +603,7 @@ export default function ChatPage() {
                 {/* Message menu popup */}
                 {menuMsgId === msg.id && (
                   <div
+                    className="anim-fade-in-scale"
                     style={{
                       position: "absolute",
                       top: 28,
@@ -649,7 +719,6 @@ export default function ChatPage() {
             boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
           }}
         >
-          {/* Plus button */}
           <button
             style={{
               background: "none",
@@ -665,7 +734,6 @@ export default function ChatPage() {
             <Plus size={22} strokeWidth={2} />
           </button>
 
-          {/* Text input */}
           <input
             ref={inputRef}
             value={inputText}
@@ -684,7 +752,6 @@ export default function ChatPage() {
             }}
           />
 
-          {/* Mic icon */}
           <button
             style={{
               background: "none",
@@ -700,7 +767,6 @@ export default function ChatPage() {
             <Mic size={21} strokeWidth={1.8} />
           </button>
 
-          {/* Green voice button */}
           <button
             style={{
               background: "hsl(142 72% 36%)",
@@ -717,7 +783,6 @@ export default function ChatPage() {
             }}
             onClick={handleSend}
           >
-            {/* Waveform icon */}
             <svg
               width="20"
               height="14"
