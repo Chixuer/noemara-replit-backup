@@ -18,3 +18,8 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+DASHSCOPE_ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
