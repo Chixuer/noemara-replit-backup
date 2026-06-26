@@ -13,6 +13,7 @@ import {
   GitBranch,
   RotateCcw,
   Pin,
+  PinOff,
   Search,
 } from "lucide-react";
 
@@ -233,7 +234,7 @@ export default function ChatPage() {
   return (
     <div
       style={{
-        background: "hsl(60 8% 96%)",
+        background: "linear-gradient(to bottom, #ffffff 0%, #ffffff 45%, #c9dff0 100%)",
         minHeight: "100svh",
         display: "flex",
         flexDirection: "column",
@@ -394,7 +395,7 @@ export default function ChatPage() {
         style={{
           position: "relative",
           zIndex: 2,
-          background: "hsl(60 8% 96%)",
+          background: "linear-gradient(to bottom, #ffffff 0%, #ffffff 45%, #c9dff0 100%)",
           minHeight: "100svh",
           display: "flex",
           flexDirection: "column",
@@ -763,7 +764,7 @@ export default function ChatPage() {
                     setTopMenuOpen(false);
                   }}
                 >
-                  <Pin size={18} strokeWidth={1.8} />
+                  {activeConv.pinned ? <PinOff size={18} strokeWidth={1.8} /> : <Pin size={18} strokeWidth={1.8} />}
                   {activeConv.pinned ? "Unpin" : "Pin"}
                 </button>
                 <button
