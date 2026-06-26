@@ -21,6 +21,15 @@ interface Message {
   text: string;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 const AI_RESPONSE = "哈喽，Chi Xu！👋 今天想搞学习、做应用，还是聊点别的？";
 
 const MODELS = [
@@ -39,17 +48,41 @@ function formatTime() {
   return `Today, ${h}:${m}`;
 }
 
-function triggerVibrate() {
-  if (typeof navigator !== "undefined" && navigator.vibrate) {
-    navigator.vibrate(15);
-  }
+function createNewConversation(title?: string): Conversation {
+  const id = generateId();
+  return {
+    id,
+    title: title || "\u65b0\u5bf9\u8bdd",
+    messages: [],
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function makeTitleFromMessage(msg: string): string {
+  if (!msg) return "\u65b0\u5bf9\u8bdd";
+  const trimmed = msg.trim();
+  if (trimmed.length <= 12) return trimmed;
+  return trimmed.slice(0, 12) + "...";
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: generateId(), role: "user", text: "\u54c8\u55bd" },
-    { id: generateId(), role: "ai", text: AI_RESPONSE },
-  ]);
+  const initialConv: Conversation = {
+    id: generateId(),
+    title: "\u54c8\u55bd\u95ee\u5019",
+    messages: [
+      { id: generateId(), role: "user", text: "\u54c8\u55bd" },
+      { id: generateId(), role: "ai", text: AI_RESPONSE },
+    ],
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const [conversations, setConversations] = useState<Conversation[]>([initialConv]);
+  const [activeId, setActiveId] = useState<string>(initialConv.id);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputText, setInputText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
@@ -62,6 +95,12 @@ export default function ChatPage() {
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const activeConv = conversations.find((c) => c.id === activeId) || conversations[0];
+  const messages = activeConv?.messages || [];
+
+  const pinnedConvs = conversations.filter((c) => c.pinned);
+  const recentConvs = conversations.filter((c) => !c.pinned);
 
   const scrollToBottom = useCallback(() => {
     if (chatRef.current) {
@@ -80,12 +119,35 @@ export default function ChatPage() {
     }
   }, [toast]);
 
+  const updateActiveMessages = (msgs: Message[]) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? { ...c, messages: msgs, updatedAt: Date.now() }
+          : c
+      )
+    );
+  };
+
   const handleSend = () => {
     const text = inputText.trim();
     if (!text) return;
 
     const userMsg: Message = { id: generateId(), role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    const newMessages = [...messages, userMsg];
+    updateActiveMessages(newMessages);
+
+    // Update title on first message if empty
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId && c.title === "\u65b0\u5bf9\u8bdd"
+          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+          : c.id === activeId
+            ? { ...c, updatedAt: Date.now() }
+            : c
+      )
+    );
+
     setInputText("");
     setReplying(true);
     setIsThinking(true);
@@ -93,24 +155,57 @@ export default function ChatPage() {
     setTimeout(() => {
       setIsThinking(false);
       const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
-      setMessages((prev) => [...prev, aiMsg]);
+      updateActiveMessages([...newMessages, aiMsg]);
       setReplying(false);
     }, 1200);
   };
 
-  const handleDelete = (id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id));
+  const handleDelete = (msgId: string) => {
+    const filtered = messages.filter((m) => m.id !== msgId);
+    updateActiveMessages(filtered);
     setActiveMsgId(null);
   };
 
-  const handleCopy = (id: string, text: string) => {
+  const handleCopy = (msgId: string, text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
-    triggerVibrate();
-    setCopiedMsgId(id);
+    setCopiedMsgId(msgId);
     setToast(true);
     setTimeout(() => {
       setCopiedMsgId(null);
     }, 2200);
+  };
+
+  const handleNewChat = () => {
+    const conv = createNewConversation();
+    setConversations((prev) => [conv, ...prev]);
+    setActiveId(conv.id);
+    setTopMenuOpen(false);
+    setSidebarOpen(false);
+  };
+
+  const handleSelectConv = (id: string) => {
+    setActiveId(id);
+    setSidebarOpen(false);
+  };
+
+  const handlePinConv = (id: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c))
+    );
+  };
+
+  const handleDeleteConv = (id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeId === id) {
+      const remaining = conversations.filter((c) => c.id !== id);
+      if (remaining.length > 0) {
+        setActiveId(remaining[0].id);
+      } else {
+        const newConv = createNewConversation();
+        setConversations([newConv]);
+        setActiveId(newConv.id);
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -130,10 +225,146 @@ export default function ChatPage() {
         maxWidth: 430,
         margin: "0 auto",
         position: "relative",
+        overflow: "hidden",
         fontFamily:
           "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
       }}
     >
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="anim-overlay"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 50,
+              background: "rgba(0,0,0,0.15)",
+            }}
+            onClick={() => setSidebarOpen(false)}
+          />
+          {/* Drawer */}
+          <div
+            className="anim-slide-right"
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              bottom: 0,
+              zIndex: 55,
+              width: 320,
+              maxWidth: "85vw",
+              background: "hsl(0 0% 100%)",
+              display: "flex",
+              flexDirection: "column",
+              padding: "24px 0",
+              boxShadow: "4px 0 24px rgba(0,0,0,0.08)",
+            }}
+          >
+            {/* Title */}
+            <div
+              style={{
+                padding: "0 20px 20px",
+                fontSize: 22,
+                fontWeight: 700,
+                color: "hsl(220 15% 10%)",
+                letterSpacing: -0.5,
+              }}
+            >
+              Noemara
+            </div>
+
+            {/* Pinned */}
+            {pinnedConvs.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div
+                  style={{
+                    padding: "0 20px 8px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "hsl(220 9% 55%)",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.8,
+                  }}
+                >
+                  Pinned
+                </div>
+                {pinnedConvs.map((c) => (
+                  <button
+                    key={c.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      width: "100%",
+                      padding: "10px 20px",
+                      background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 15,
+                      color: "hsl(220 15% 12%)",
+                      fontWeight: 500,
+                      textAlign: "left",
+                      borderRadius: 0,
+                    }}
+                    onClick={() => handleSelectConv(c.id)}
+                  >
+                    <Pin size={16} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)" }} />
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Recents */}
+            {recentConvs.length > 0 && (
+              <div>
+                <div
+                  style={{
+                    padding: "0 20px 8px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "hsl(220 9% 55%)",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.8,
+                  }}
+                >
+                  Recents
+                </div>
+                {recentConvs.map((c) => (
+                  <button
+                    key={c.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      width: "100%",
+                      padding: "10px 20px",
+                      background: activeId === c.id ? "hsl(220 14% 92%)" : "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 15,
+                      color: "hsl(220 15% 12%)",
+                      fontWeight: 500,
+                      textAlign: "left",
+                      borderRadius: 0,
+                    }}
+                    onClick={() => handleSelectConv(c.id)}
+                  >
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {c.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Toast: Message copied */}
       {toast && (
         <div
@@ -170,13 +401,7 @@ export default function ChatPage() {
           >
             <X size={16} strokeWidth={2.2} />
           </button>
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 500,
-              color: "hsl(220 15% 10%)",
-            }}
-          >
+          <span style={{ fontSize: 14, fontWeight: 500, color: "hsl(220 15% 10%)" }}>
             Message copied
           </span>
         </div>
@@ -209,7 +434,6 @@ export default function ChatPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Model title */}
             <button
               style={{
                 display: "flex",
@@ -227,17 +451,9 @@ export default function ChatPage() {
                 letterSpacing: -0.3,
               }}
             >
-              <span>
-                GPT-5.5
-              </span>
-              <ChevronRight
-                size={16}
-                strokeWidth={2.2}
-                style={{ color: "hsl(220 9% 55%)" }}
-              />
+              <span>GPT-5.5</span>
+              <ChevronRight size={16} strokeWidth={2.2} style={{ color: "hsl(220 9% 55%)" }} />
             </button>
-
-            {/* Intelligence label */}
             <div
               style={{
                 padding: "12px 20px 6px",
@@ -249,8 +465,6 @@ export default function ChatPage() {
             >
               Intelligence
             </div>
-
-            {/* Model options */}
             {MODELS.map((m) => (
               <button
                 key={m.value}
@@ -274,11 +488,7 @@ export default function ChatPage() {
               >
                 <span>{m.label}</span>
                 {selectedModel === m.value && (
-                  <Check
-                    size={18}
-                    strokeWidth={2.5}
-                    style={{ color: "hsl(220 15% 15%)" }}
-                  />
+                  <Check size={18} strokeWidth={2.5} style={{ color: "hsl(220 15% 15%)" }} />
                 )}
               </button>
             ))}
@@ -307,6 +517,7 @@ export default function ChatPage() {
               display: "flex",
               alignItems: "center",
             }}
+            onClick={() => setSidebarOpen(true)}
           >
             <AlignLeft size={22} strokeWidth={1.8} />
           </button>
@@ -352,6 +563,7 @@ export default function ChatPage() {
               display: "flex",
               alignItems: "center",
             }}
+            onClick={handleNewChat}
           >
             <SquarePen size={21} strokeWidth={1.8} />
           </button>
@@ -386,7 +598,6 @@ export default function ChatPage() {
                 boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
               }}
             >
-              {/* Pin */}
               <button
                 style={{
                   display: "flex",
@@ -402,12 +613,14 @@ export default function ChatPage() {
                   fontWeight: 500,
                   textAlign: "left",
                 }}
+                onClick={() => {
+                  handlePinConv(activeId);
+                  setTopMenuOpen(false);
+                }}
               >
                 <Pin size={18} strokeWidth={1.8} />
-                Pin
+                {activeConv.pinned ? "Unpin" : "Pin"}
               </button>
-
-              {/* Delete */}
               <button
                 style={{
                   display: "flex",
@@ -425,7 +638,7 @@ export default function ChatPage() {
                 }}
                 onClick={() => {
                   setTopMenuOpen(false);
-                  setMessages([]);
+                  handleDeleteConv(activeId);
                 }}
               >
                 <Trash2 size={18} strokeWidth={1.8} />
@@ -448,50 +661,145 @@ export default function ChatPage() {
           overflowY: "auto",
         }}
       >
-        {messages.map((msg) => {
-          if (msg.role === "user") {
+        {messages.length === 0 ? (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "hsl(220 9% 55%)",
+              fontSize: 14,
+              fontStyle: "italic",
+            }}
+          >
+            Start a new conversation
+          </div>
+        ) : (
+          messages.map((msg) => {
+            if (msg.role === "user") {
+              return (
+                <div
+                  key={msg.id}
+                  className="anim-fade-in"
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    position: "relative",
+                  }}
+                  onClick={() =>
+                    setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                  }
+                >
+                  <div
+                    style={{
+                      background: "hsl(142 55% 72%)",
+                      color: "hsl(142 40% 15%)",
+                      borderRadius: "20px 20px 6px 20px",
+                      padding: "10px 16px",
+                      fontSize: 16,
+                      fontWeight: 500,
+                      maxWidth: "70%",
+                      letterSpacing: 0.1,
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                  {activeMsgId === msg.id && (
+                    <div
+                      className="anim-fade-in-scale"
+                      style={{
+                        position: "absolute",
+                        top: -34,
+                        right: 0,
+                        display: "flex",
+                        gap: 6,
+                      }}
+                    >
+                      <button
+                        style={{
+                          background: "hsl(0 0% 20%)",
+                          border: "none",
+                          borderRadius: 18,
+                          padding: "6px 12px",
+                          color: "#fff",
+                          fontSize: 13,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(msg.id);
+                        }}
+                      >
+                        <Trash2 size={13} strokeWidth={2} />
+                        删除
+                      </button>
+                      <button
+                        style={{
+                          background: "hsl(0 0% 20%)",
+                          border: "none",
+                          borderRadius: "50%",
+                          width: 28,
+                          height: 28,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          color: "#fff",
+                          padding: 0,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMsgId(null);
+                        }}
+                      >
+                        <X size={14} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <div
                 key={msg.id}
                 className="anim-fade-in"
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  position: "relative",
-                }}
-                onClick={() =>
-                  setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                }
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
               >
-                <div
+                <p
                   style={{
-                    background: "hsl(142 55% 72%)",
-                    color: "hsl(142 40% 15%)",
-                    borderRadius: "20px 20px 6px 20px",
-                    padding: "10px 16px",
-                    fontSize: 16,
-                    fontWeight: 500,
-                    maxWidth: "70%",
-                    letterSpacing: 0.1,
-                    cursor: "pointer",
-                    userSelect: "none",
+                    margin: 0,
+                    fontSize: 14,
+                    color: "hsl(220 9% 60%)",
+                    fontStyle: "italic",
+                    paddingLeft: 2,
                   }}
                 >
+                  Thought for a second
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    color: "hsl(220 15% 12%)",
+                    lineHeight: 1.6,
+                    letterSpacing: 0.1,
+                  }}
+                  onClick={() =>
+                    setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                  }
+                >
                   {msg.text}
-                </div>
-
-                {/* Delete bubble */}
+                </p>
                 {activeMsgId === msg.id && (
-                  <div
-                    className="anim-fade-in-scale"
-                    style={{
-                      position: "absolute",
-                      top: -34,
-                      right: 0,
-                      display: "flex",
-                      gap: 6,
-                    }}
-                  >
+                  <div className="anim-fade-in-scale" style={{ display: "flex", gap: 6, marginTop: -6 }}>
                     <button
                       style={{
                         background: "hsl(0 0% 20%)",
@@ -504,7 +812,6 @@ export default function ChatPage() {
                         alignItems: "center",
                         gap: 4,
                         cursor: "pointer",
-                        whiteSpace: "nowrap",
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -537,244 +844,135 @@ export default function ChatPage() {
                     </button>
                   </div>
                 )}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 20,
+                    marginTop: 4,
+                    position: "relative",
+                  }}
+                >
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                    onClick={() => handleCopy(msg.id, msg.text)}
+                  >
+                    {copiedMsgId === msg.id ? (
+                      <Check size={18} strokeWidth={2.5} />
+                    ) : (
+                      <Copy size={18} strokeWidth={1.7} />
+                    )}
+                  </button>
+                  <button
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      color: "hsl(220 9% 55%)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                    onClick={() =>
+                      setMenuMsgId(menuMsgId === msg.id ? null : msg.id)
+                    }
+                  >
+                    <MoreHorizontal size={18} strokeWidth={1.7} />
+                  </button>
+                  {menuMsgId === msg.id && (
+                    <div
+                      className="anim-fade-in-scale"
+                      style={{
+                        position: "absolute",
+                        top: 28,
+                        left: 20,
+                        zIndex: 10,
+                        background: "hsl(0 0% 100%)",
+                        borderRadius: 16,
+                        padding: "14px 0",
+                        width: 240,
+                        boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: "0 16px 6px",
+                          fontSize: 13,
+                          color: "hsl(220 9% 55%)",
+                          fontWeight: 500,
+                          textAlign: "left",
+                          letterSpacing: 0.2,
+                        }}
+                      >
+                        {formatTime()}
+                      </div>
+                      <button
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          width: "100%",
+                          padding: "10px 16px",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 15,
+                          color: "hsl(220 15% 10%)",
+                          fontWeight: 500,
+                          textAlign: "left",
+                        }}
+                      >
+                        <GitBranch size={18} strokeWidth={1.8} />
+                        Branch in new chat
+                      </button>
+                      <div
+                        style={{ height: 1, background: "hsl(0 0% 92%)", margin: "4px 16px" }}
+                      />
+                      <div
+                        style={{
+                          padding: "6px 16px",
+                          fontSize: 13,
+                          color: "hsl(220 9% 55%)",
+                          fontWeight: 500,
+                          letterSpacing: 0.2,
+                        }}
+                      >
+                        Used 5.5 Thinking
+                      </div>
+                      <button
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                          width: "100%",
+                          padding: "10px 16px",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 15,
+                          color: "hsl(220 15% 10%)",
+                          fontWeight: 500,
+                          textAlign: "left",
+                        }}
+                      >
+                        <RotateCcw size={18} strokeWidth={1.8} />
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             );
-          }
-
-          // AI message
-          return (
-            <div
-              key={msg.id}
-              className="anim-fade-in"
-              style={{ display: "flex", flexDirection: "column", gap: 10 }}
-            >
-              {/* Thinking label */}
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 14,
-                  color: "hsl(220 9% 60%)",
-                  fontStyle: "italic",
-                  paddingLeft: 2,
-                }}
-              >
-                Thought for a second
-              </p>
-
-              {/* AI message text */}
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 16,
-                  color: "hsl(220 15% 12%)",
-                  lineHeight: 1.6,
-                  letterSpacing: 0.1,
-                }}
-                onClick={() =>
-                  setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                }
-              >
-                {msg.text}
-              </p>
-
-              {/* Delete / actions on click message */}
-              {activeMsgId === msg.id && (
-                <div
-                  className="anim-fade-in-scale"
-                  style={{ display: "flex", gap: 6, marginTop: -6 }}
-                >
-                  <button
-                    style={{
-                      background: "hsl(0 0% 20%)",
-                      border: "none",
-                      borderRadius: 18,
-                      padding: "6px 12px",
-                      color: "#fff",
-                      fontSize: 13,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      cursor: "pointer",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(msg.id);
-                    }}
-                  >
-                    <Trash2 size={13} strokeWidth={2} />
-                    删除
-                  </button>
-                  <button
-                    style={{
-                      background: "hsl(0 0% 20%)",
-                      border: "none",
-                      borderRadius: "50%",
-                      width: 28,
-                      height: 28,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      color: "#fff",
-                      padding: 0,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMsgId(null);
-                    }}
-                  >
-                    <X size={14} strokeWidth={2.5} />
-                  </button>
-                </div>
-              )}
-
-              {/* Action icons row */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 20,
-                  marginTop: 4,
-                  position: "relative",
-                }}
-              >
-                {/* Copy button / Checkmark */}
-                <button
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                  onClick={() => handleCopy(msg.id, msg.text)}
-                >
-                  {copiedMsgId === msg.id ? (
-                    <Check size={18} strokeWidth={2.5} />
-                  ) : (
-                    <Copy size={18} strokeWidth={1.7} />
-                  )}
-                </button>
-
-                {/* More button */}
-                <button
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    color: "hsl(220 9% 55%)",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                  onClick={() =>
-                    setMenuMsgId(menuMsgId === msg.id ? null : msg.id)
-                  }
-                >
-                  <MoreHorizontal size={18} strokeWidth={1.7} />
-                </button>
-
-                {/* Message menu popup */}
-                {menuMsgId === msg.id && (
-                  <div
-                    className="anim-fade-in-scale"
-                    style={{
-                      position: "absolute",
-                      top: 28,
-                      left: 20,
-                      zIndex: 10,
-                      background: "hsl(0 0% 100%)",
-                      borderRadius: 16,
-                      padding: "14px 0",
-                      width: 240,
-                      boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-                    }}
-                  >
-                    {/* Time label */}
-                    <div
-                      style={{
-                        padding: "0 16px 6px",
-                        fontSize: 13,
-                        color: "hsl(220 9% 55%)",
-                        fontWeight: 500,
-                        textAlign: "left",
-                        letterSpacing: 0.2,
-                      }}
-                    >
-                      {formatTime()}
-                    </div>
-
-                    {/* Branch in new chat */}
-                    <button
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        width: "100%",
-                        padding: "10px 16px",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: 15,
-                        color: "hsl(220 15% 10%)",
-                        fontWeight: 500,
-                        textAlign: "left",
-                      }}
-                    >
-                      <GitBranch size={18} strokeWidth={1.8} />
-                      Branch in new chat
-                    </button>
-
-                    {/* Divider */}
-                    <div
-                      style={{
-                        height: 1,
-                        background: "hsl(0 0% 92%)",
-                        margin: "4px 16px",
-                      }}
-                    />
-
-                    {/* Used model info */}
-                    <div
-                      style={{
-                        padding: "6px 16px",
-                        fontSize: 13,
-                        color: "hsl(220 9% 55%)",
-                        fontWeight: 500,
-                        letterSpacing: 0.2,
-                      }}
-                    >
-                      Used 5.5 Thinking
-                    </div>
-
-                    {/* Retry */}
-                    <button
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        width: "100%",
-                        padding: "10px 16px",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: 15,
-                        color: "hsl(220 15% 10%)",
-                        fontWeight: 500,
-                        textAlign: "left",
-                      }}
-                    >
-                      <RotateCcw size={18} strokeWidth={1.8} />
-                      Retry
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+          })
+        )}
       </div>
 
       {/* Bottom Input Bar */}
@@ -830,7 +1028,6 @@ export default function ChatPage() {
             }}
           />
 
-          {/* Mic icon — hidden when typing */}
           {!inputText && (
             <button
               style={{
@@ -848,7 +1045,6 @@ export default function ChatPage() {
             </button>
           )}
 
-          {/* Send button */}
           <button
             style={{
               background: "hsl(142 72% 36%)",
@@ -867,12 +1063,10 @@ export default function ChatPage() {
             onClick={handleSend}
           >
             {inputText ? (
-              /* Green up arrow when typing */
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             ) : (
-              /* Waveform icon when idle */
               <svg
                 width="20"
                 height="14"
