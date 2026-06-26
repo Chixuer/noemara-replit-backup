@@ -12,6 +12,7 @@ import {
   Check,
   GitBranch,
   RotateCcw,
+  Pin,
 } from "lucide-react";
 
 interface Message {
@@ -52,6 +53,7 @@ export default function ChatPage() {
   const [inputText, setInputText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState("thinking");
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
@@ -339,7 +341,7 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
           <button
             style={{
               background: "none",
@@ -363,9 +365,74 @@ export default function ChatPage() {
               display: "flex",
               alignItems: "center",
             }}
+            onClick={() => setTopMenuOpen(!topMenuOpen)}
           >
             <MoreHorizontal size={22} strokeWidth={1.8} />
           </button>
+
+          {/* Top-right menu popup */}
+          {topMenuOpen && (
+            <div
+              className="anim-fade-in-scale"
+              style={{
+                position: "absolute",
+                top: 36,
+                right: -6,
+                zIndex: 40,
+                background: "hsl(0 0% 100%)",
+                borderRadius: 18,
+                padding: "10px 0",
+                width: 200,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+              }}
+            >
+              {/* Pin */}
+              <button
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "10px 16px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 15,
+                  color: "hsl(220 15% 10%)",
+                  fontWeight: 500,
+                  textAlign: "left",
+                }}
+              >
+                <Pin size={18} strokeWidth={1.8} />
+                Pin
+              </button>
+
+              {/* Delete */}
+              <button
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  width: "100%",
+                  padding: "10px 16px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 15,
+                  color: "hsl(0 70% 55%)",
+                  fontWeight: 500,
+                  textAlign: "left",
+                }}
+                onClick={() => {
+                  setTopMenuOpen(false);
+                  setMessages([]);
+                }}
+              >
+                <Trash2 size={18} strokeWidth={1.8} />
+                Delete
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
