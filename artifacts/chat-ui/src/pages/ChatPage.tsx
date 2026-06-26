@@ -57,6 +57,7 @@ export default function ChatPage() {
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
   const [toast, setToast] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -100,10 +101,14 @@ export default function ChatPage() {
     setActiveMsgId(null);
   };
 
-  const handleCopy = (text: string) => {
+  const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
     triggerVibrate();
+    setCopiedMsgId(id);
     setToast(true);
+    setTimeout(() => {
+      setCopiedMsgId(null);
+    }, 2200);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -134,19 +139,18 @@ export default function ChatPage() {
           style={{
             position: "fixed",
             top: 56,
-            left: "50%",
-            transform: "translateX(-50%)",
+            left: 18,
+            right: 18,
             zIndex: 60,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
             background: "hsl(0 0% 100%)",
             borderRadius: 24,
             padding: "10px 16px",
             boxShadow: "0 4px 20px rgba(0,0,0,0.10)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            maxWidth: "90%",
-            width: "auto",
-            whiteSpace: "nowrap",
+            maxWidth: 430,
+            margin: "0 auto",
           }}
         >
           <button
@@ -158,6 +162,7 @@ export default function ChatPage() {
               color: "hsl(220 9% 55%)",
               display: "flex",
               alignItems: "center",
+              flexShrink: 0,
             }}
             onClick={() => setToast(false)}
           >
@@ -566,20 +571,24 @@ export default function ChatPage() {
                   position: "relative",
                 }}
               >
-                {/* Copy button */}
+                {/* Copy button / Checkmark */}
                 <button
                   style={{
                     background: "none",
                     border: "none",
                     padding: 0,
                     cursor: "pointer",
-                    color: "hsl(220 9% 55%)",
+                    color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
                     display: "flex",
                     alignItems: "center",
                   }}
-                  onClick={() => handleCopy(msg.text)}
+                  onClick={() => handleCopy(msg.id, msg.text)}
                 >
-                  <Copy size={18} strokeWidth={1.7} />
+                  {copiedMsgId === msg.id ? (
+                    <Check size={18} strokeWidth={2.5} />
+                  ) : (
+                    <Copy size={18} strokeWidth={1.7} />
+                  )}
                 </button>
 
                 {/* More button */}
