@@ -25,7 +25,6 @@ const AI_RESPONSE = "哈喽，Chi Xu！\ud83d\udc4b \u4eca\u5929\u60f3\u641e\u5b
 const MODELS = [
   { label: "Flash", value: "flash" },
   { label: "Thinking", value: "thinking" },
-  { label: "High", value: "high" },
 ];
 
 function generateId() {
@@ -40,7 +39,7 @@ export default function ChatPage() {
   const [inputText, setInputText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("high");
+  const [selectedModel, setSelectedModel] = useState("thinking");
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
