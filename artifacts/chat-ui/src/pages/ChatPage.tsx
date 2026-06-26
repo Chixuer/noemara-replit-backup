@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   AlignLeft,
   ChevronRight,
@@ -7,11 +7,11 @@ import {
   Plus,
   Mic,
   Copy,
-  Volume2,
-  Share,
   X,
   Trash2,
   Check,
+  GitBranch,
+  RotateCcw,
 } from "lucide-react";
 
 interface Message {
@@ -31,6 +31,13 @@ function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2, 8);
 }
 
+function formatTime() {
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2, "0");
+  const m = now.getMinutes().toString().padStart(2, "0");
+  return `Today, ${h}:${m}`;
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     { id: generateId(), role: "user", text: "\u54c8\u55bd" },
@@ -41,19 +48,20 @@ export default function ChatPage() {
   const [modelOpen, setModelOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState("thinking");
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+  const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, replying]);
+  }, [messages, replying, scrollToBottom]);
 
   const handleSend = () => {
     const text = inputText.trim();
@@ -77,6 +85,10 @@ export default function ChatPage() {
   const handleDelete = (id: string) => {
     setMessages((prev) => prev.filter((m) => m.id !== id));
     setActiveMsgId(null);
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -397,9 +409,6 @@ export default function ChatPage() {
             <div
               key={msg.id}
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
-              onClick={() =>
-                setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-              }
             >
               {/* Thinking label */}
               <p
@@ -422,14 +431,15 @@ export default function ChatPage() {
                   color: "hsl(220 15% 12%)",
                   lineHeight: 1.6,
                   letterSpacing: 0.1,
-                  cursor: "pointer",
-                  userSelect: "none",
                 }}
+                onClick={() =>
+                  setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
+                }
               >
                 {msg.text}
               </p>
 
-              {/* Delete / actions */}
+              {/* Delete / actions on click message */}
               {activeMsgId === msg.id && (
                 <div style={{ display: "flex", gap: 6, marginTop: -6 }}>
                   <button
@@ -478,69 +488,144 @@ export default function ChatPage() {
               )}
 
               {/* Action icons row */}
-              {activeMsgId !== msg.id && (
-                <div
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 20,
+                  marginTop: 4,
+                  position: "relative",
+                }}
+              >
+                {/* Copy button */}
+                <button
                   style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    color: "hsl(220 9% 55%)",
                     display: "flex",
                     alignItems: "center",
-                    gap: 20,
-                    marginTop: 4,
                   }}
+                  onClick={() => handleCopy(msg.text)}
                 >
-                  <button
+                  <Copy size={18} strokeWidth={1.7} />
+                </button>
+
+                {/* More button */}
+                <button
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    color: "hsl(220 9% 55%)",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                  onClick={() =>
+                    setMenuMsgId(menuMsgId === msg.id ? null : msg.id)
+                  }
+                >
+                  <MoreHorizontal size={18} strokeWidth={1.7} />
+                </button>
+
+                {/* Message menu popup */}
+                {menuMsgId === msg.id && (
+                  <div
                     style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
+                      position: "absolute",
+                      top: 28,
+                      left: 20,
+                      zIndex: 10,
+                      background: "hsl(0 0% 100%)",
+                      borderRadius: 16,
+                      padding: "14px 0",
+                      width: 240,
+                      boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
                     }}
                   >
-                    <Copy size={18} strokeWidth={1.7} />
-                  </button>
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Volume2 size={18} strokeWidth={1.7} />
-                  </button>
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Share size={18} strokeWidth={1.7} />
-                  </button>
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 9% 55%)",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <MoreHorizontal size={18} strokeWidth={1.7} />
-                  </button>
-                </div>
-              )}
+                    {/* Time label */}
+                    <div
+                      style={{
+                        padding: "0 16px 6px",
+                        fontSize: 13,
+                        color: "hsl(220 9% 55%)",
+                        fontWeight: 500,
+                        textAlign: "right",
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      {formatTime()}
+                    </div>
+
+                    {/* Branch in new chat */}
+                    <button
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        width: "100%",
+                        padding: "10px 16px",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 15,
+                        color: "hsl(220 15% 10%)",
+                        fontWeight: 500,
+                        textAlign: "left",
+                      }}
+                    >
+                      <GitBranch size={18} strokeWidth={1.8} />
+                      Branch in new chat
+                    </button>
+
+                    {/* Divider */}
+                    <div
+                      style={{
+                        height: 1,
+                        background: "hsl(0 0% 92%)",
+                        margin: "4px 16px",
+                      }}
+                    />
+
+                    {/* Used model info */}
+                    <div
+                      style={{
+                        padding: "6px 16px",
+                        fontSize: 13,
+                        color: "hsl(220 9% 55%)",
+                        fontWeight: 500,
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      Used 5.5 Thinking
+                    </div>
+
+                    {/* Retry */}
+                    <button
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        width: "100%",
+                        padding: "10px 16px",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 15,
+                        color: "hsl(220 15% 10%)",
+                        fontWeight: 500,
+                        textAlign: "left",
+                      }}
+                    >
+                      <RotateCcw size={18} strokeWidth={1.8} />
+                      Retry
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
