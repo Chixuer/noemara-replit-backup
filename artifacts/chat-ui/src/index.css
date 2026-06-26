@@ -108,3 +108,8 @@
 .anim-overlay {
   animation: fadeInOverlay 0.2s ease-out forwards;
 }
+
+/* ===== Cursor ===== */
+input[type="text"] {
+  caret-color: hsl(142 72% 36%);
+}

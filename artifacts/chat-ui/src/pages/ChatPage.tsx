@@ -745,10 +745,11 @@ export default function ChatPage() {
 
           <input
             ref={inputRef}
+            type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask ChatGPT"
+            placeholder={inputText ? undefined : "Ask ChatGPT"}
             style={{
               flex: 1,
               fontSize: 15.5,
@@ -758,24 +759,29 @@ export default function ChatPage() {
               background: "transparent",
               padding: 0,
               letterSpacing: 0.1,
+              caretColor: "hsl(142 72% 36%)",
             }}
           />
 
-          <button
-            style={{
-              background: "none",
-              border: "none",
-              padding: 0,
-              cursor: "pointer",
-              color: "hsl(220 15% 35%)",
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
-          >
-            <Mic size={21} strokeWidth={1.8} />
-          </button>
+          {/* Mic icon — hidden when typing */}
+          {!inputText && (
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
+                cursor: "pointer",
+                color: "hsl(220 15% 35%)",
+                display: "flex",
+                alignItems: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Mic size={21} strokeWidth={1.8} />
+            </button>
+          )}
 
+          {/* Send button */}
           <button
             style={{
               background: "hsl(142 72% 36%)",
@@ -789,23 +795,32 @@ export default function ChatPage() {
               cursor: "pointer",
               flexShrink: 0,
               padding: 0,
+              transition: "all 0.2s ease",
             }}
             onClick={handleSend}
           >
-            <svg
-              width="20"
-              height="14"
-              viewBox="0 0 20 14"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
-              <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-              <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
-              <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-              <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
-              <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
-            </svg>
+            {inputText ? (
+              /* Green up arrow when typing */
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              /* Waveform icon when idle */
+              <svg
+                width="20"
+                height="14"
+                viewBox="0 0 20 14"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
+                <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
+                <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
+                <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
+              </svg>
+            )}
           </button>
         </div>
       </div>
