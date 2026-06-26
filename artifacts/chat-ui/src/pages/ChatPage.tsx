@@ -100,6 +100,12 @@ export default function ChatPage() {
   const [toast, setToast] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  // voiceMounted: whether VoiceRecorder is in the DOM (includes exit-animation window)
+  const [voiceMounted, setVoiceMounted] = useState(false);
+  // voiceActive: opacity target — true = recorder visible, false = input visible
+  const [voiceActive, setVoiceActive] = useState(false);
+  const voiceExitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -233,13 +239,35 @@ export default function ChatPage() {
     }
   };
 
-  const handleVoiceTranscribe = (text: string) => {
+  // Start recording: mount immediately, then on next frame activate so CSS transition fires
+  const startVoice = useCallback(() => {
+    if (voiceExitTimer.current) clearTimeout(voiceExitTimer.current);
+    setVoiceMounted(true);
+    setIsRecording(true);
+    // Activate on next frame so VoiceRecorder renders at opacity 0 first, then transitions in
+    requestAnimationFrame(() => setVoiceActive(true));
+  }, []);
+
+  // Stop recording: deactivate (triggers CSS transition out), then unmount after transition
+  const stopVoice = useCallback(() => {
+    setVoiceActive(false);
     setIsRecording(false);
+    voiceExitTimer.current = setTimeout(() => {
+      setVoiceMounted(false);
+    }, 260);
+  }, []);
+
+  useEffect(() => {
+    return () => { if (voiceExitTimer.current) clearTimeout(voiceExitTimer.current); };
+  }, []);
+
+  const handleVoiceTranscribe = (text: string) => {
+    stopVoice();
     setInputText(text);
   };
 
   const handleVoiceSend = (text: string) => {
-    setIsRecording(false);
+    stopVoice();
     if (!text.trim()) return;
 
     const userMsg: Message = { id: generateId(), role: "user", text };
@@ -268,7 +296,7 @@ export default function ChatPage() {
   };
 
   const handleVoiceCancel = () => {
-    setIsRecording(false);
+    stopVoice();
   };
 
   return (
@@ -959,7 +987,7 @@ export default function ChatPage() {
                 return (
                   <div
                     key={msg.id}
-                    className="anim-fade-in"
+                    className="msg-bubble-user"
                     style={{
                       display: "flex",
                       justifyContent: "flex-end",
@@ -1048,7 +1076,7 @@ export default function ChatPage() {
               return (
                 <div
                   key={msg.id}
-                  className="anim-fade-in"
+                  className="msg-bubble-ai"
                   style={{ display: "flex", flexDirection: "column", gap: 10 }}
                 >
                   <p
@@ -1260,117 +1288,117 @@ export default function ChatPage() {
             background: "hsl(60 8% 96%)",
           }}
         >
+          {/* Pill container — two layers cross-fade inside */}
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
+              position: "relative",
               background: "hsl(0 0% 100%)",
               borderRadius: 28,
-              padding: "10px 10px 10px 16px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+              boxShadow: "0 1px 6px rgba(0,0,0,0.07)",
+              minHeight: 58,
+              overflow: "hidden",
             }}
           >
-            {isRecording ? (
-              <VoiceRecorder
-                onTranscribe={handleVoiceTranscribe}
-                onSend={handleVoiceSend}
-                onCancel={handleVoiceCancel}
+            {/* ── Input layer ── */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 10px 10px 16px",
+                opacity: voiceActive ? 0 : 1,
+                transform: voiceActive ? "translateY(5px)" : "translateY(0)",
+                pointerEvents: voiceActive ? "none" : "auto",
+                transition: "opacity 0.24s cubic-bezier(0.22,1,0.36,1), transform 0.24s cubic-bezier(0.22,1,0.36,1)",
+              }}
+            >
+              <button
+                style={{
+                  background: "none", border: "none", padding: 0,
+                  cursor: "pointer", color: "hsl(220 15% 35%)",
+                  display: "flex", alignItems: "center", flexShrink: 0,
+                }}
+              >
+                <Plus size={22} strokeWidth={2} />
+              </button>
+
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask ChatGPT"
+                style={{
+                  flex: 1, fontSize: 15.5, color: "hsl(220 15% 12%)",
+                  border: "none", outline: "none", background: "transparent",
+                  padding: 0, letterSpacing: 0.1,
+                }}
               />
-            ) : (
-              <>
+
+              {!inputText && (
                 <button
+                  className="btn-circle"
                   style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    color: "hsl(220 15% 35%)",
-                    display: "flex",
-                    alignItems: "center",
-                    flexShrink: 0,
+                    background: "none", border: "none", padding: 0,
+                    cursor: "pointer", color: "hsl(220 15% 35%)",
+                    display: "flex", alignItems: "center", flexShrink: 0,
                   }}
+                  onClick={startVoice}
                 >
-                  <Plus size={22} strokeWidth={2} />
+                  <Mic size={21} strokeWidth={1.8} />
                 </button>
+              )}
 
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={inputText ? undefined : "Ask ChatGPT"}
-                  style={{
-                    flex: 1,
-                    fontSize: 15.5,
-                    color: "hsl(220 15% 12%)",
-                    border: "none",
-                    outline: "none",
-                    background: "transparent",
-                    padding: 0,
-                    letterSpacing: 0.1,
-                    caretColor: "hsl(142 72% 36%)",
-                  }}
-                />
-
-                {!inputText && (
-                  <button
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      color: "hsl(220 15% 35%)",
-                      display: "flex",
-                      alignItems: "center",
-                      flexShrink: 0,
-                    }}
-                    onClick={() => setIsRecording(true)}
-                  >
-                    <Mic size={21} strokeWidth={1.8} />
-                  </button>
+              <button
+                className="btn-circle"
+                style={{
+                  background: "hsl(142 72% 36%)", border: "none",
+                  borderRadius: "50%", width: 38, height: 38,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", flexShrink: 0, padding: 0,
+                  transition: "background 0.2s ease",
+                }}
+                onClick={handleSend}
+              >
+                {inputText ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="14" viewBox="0 0 20 14" fill="none">
+                    <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
+                    <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                    <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
+                    <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                    <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
+                    <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
+                  </svg>
                 )}
+              </button>
+            </div>
 
-                <button
-                  style={{
-                    background: "hsl(142 72% 36%)",
-                    border: "none",
-                    borderRadius: "50%",
-                    width: 38,
-                    height: 38,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    padding: 0,
-                    transition: "all 0.2s ease",
-                  }}
-                  onClick={handleSend}
-                >
-                  {inputText ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  ) : (
-                    <svg
-                      width="20"
-                      height="14"
-                      viewBox="0 0 20 14"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
-                      <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                      <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
-                      <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                      <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
-                      <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
-                    </svg>
-                  )}
-                </button>
-              </>
+            {/* ── Voice recorder layer (cross-fades over input) ── */}
+            {voiceMounted && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "10px 10px 10px 16px",
+                  opacity: voiceActive ? 1 : 0,
+                  transform: voiceActive ? "translateY(0)" : "translateY(5px)",
+                  pointerEvents: voiceActive ? "auto" : "none",
+                  transition: "opacity 0.26s cubic-bezier(0.22,1,0.36,1), transform 0.26s cubic-bezier(0.22,1,0.36,1)",
+                }}
+              >
+                <VoiceRecorder
+                  onTranscribe={handleVoiceTranscribe}
+                  onSend={handleVoiceSend}
+                  onCancel={handleVoiceCancel}
+                />
+              </div>
             )}
           </div>
         </div>
