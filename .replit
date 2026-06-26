@@ -23,3 +23,4 @@ timeoutMs = 20000
 
 [userenv.shared]
 DASHSCOPE_ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+DASHSCOPE_ASR_MODEL = "qwen3-asr-flash"

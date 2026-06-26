@@ -8,6 +8,8 @@ const ASR_API_URL =
   process.env.DASHSCOPE_ASR_URL ??
   "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 
+const ASR_MODEL = process.env.DASHSCOPE_ASR_MODEL ?? "qwen3-asr-flash";
+
 const ASR_API_KEY = process.env.DASHSCOPE_API_KEY;
 
 const DEFAULT_HOTWORDS = [
@@ -103,7 +105,7 @@ router.post("/asr/transcribe", async (req, res): Promise<void> => {
   const dataUri = `data:${mimeType};base64,${audioBuffer.toString("base64")}`;
 
   const payload: Record<string, unknown> = {
-    model: "qwen3-asr-flash",
+    model: ASR_MODEL,
     messages: [
       {
         role: "user",
