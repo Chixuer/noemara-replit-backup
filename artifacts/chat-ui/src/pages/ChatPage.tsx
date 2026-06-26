@@ -257,11 +257,11 @@ export default function ChatPage() {
           bottom: 0,
           width: 320,
           maxWidth: "85vw",
-          zIndex: 1,
+          zIndex: searchOpen ? 60 : 1,
           background: "hsl(0 0% 100%)",
           display: "flex",
           flexDirection: "column",
-          padding: "24px 0",
+          padding: searchOpen ? "0" : "24px 0",
           overflowY: "auto",
           overflowX: "hidden",
         }}
@@ -526,7 +526,7 @@ export default function ChatPage() {
 
       {/* ===== MAIN CONTENT (slides right when sidebar opens) ===== */}
       <div
-        className="main-slide"
+        className={searchOpen ? "main-slide main-content-search-active" : "main-slide"}
         style={{
           position: "relative",
           zIndex: 2,
