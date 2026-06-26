@@ -337,7 +337,7 @@ export default function ChatPage() {
                 }}
                 onClick={() => handleSelectConv(c.id)}
               >
-                <Circle size={16} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
+                <Pin size={16} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
                 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.title}
                 </span>
