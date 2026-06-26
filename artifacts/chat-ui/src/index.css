@@ -125,54 +125,6 @@ input[type="text"] {
   animation: slideRight 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* ===== Sidebar search transitions ===== */
-.sidebar-normal {
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.sidebar-search {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.sidebar-search-bar {
-  opacity: 0;
-  transform: scale(0.92) translateY(-6px);
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1) 0.05s,
-              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1) 0.05s;
-}
-
-.sidebar-search-list {
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
-              transform 0.35s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;
-}
-
-.sidebar-search-active .sidebar-normal {
-  opacity: 0;
-  transform: translateY(-8px);
-  pointer-events: none;
-}
-
-.sidebar-search-active .sidebar-search {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sidebar-search-active .sidebar-search-bar {
-  opacity: 1;
-  transform: scale(1) translateY(0);
-}
-
-.sidebar-search-active .sidebar-search-list {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 /* ===== Main content fade when search active ===== */
 .main-slide {
   transition: opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
@@ -183,4 +135,43 @@ input[type="text"] {
   opacity: 0;
   pointer-events: none;
   transform: translateX(300px) !important;
+}
+
+/* ===== Full-screen search overlay ===== */
+.app-search-overlay {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-search-overlay-active {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.app-search-overlay-bar {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.06s,
+              transform 0.28s cubic-bezier(0.22, 1, 0.36, 1) 0.06s;
+}
+
+.app-search-overlay-active .app-search-overlay-bar {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.app-search-overlay-list {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1) 0.1s,
+              transform 0.32s cubic-bezier(0.22, 1, 0.36, 1) 0.1s;
+}
+
+.app-search-overlay-active .app-search-overlay-list {
+  opacity: 1;
+  transform: translateY(0);
 }

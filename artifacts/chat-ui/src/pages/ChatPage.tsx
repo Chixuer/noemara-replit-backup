@@ -249,7 +249,7 @@ export default function ChatPage() {
     >
       {/* ===== SIDEBAR (fixed behind, visible when main slides) ===== */}
       <div
-        className={searchOpen ? "sidebar-search-active" : ""}
+        className="sidebar-normal-wrap"
         style={{
           position: "fixed",
           top: 0,
@@ -393,120 +393,100 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Search view */}
+      </div>
+
+      {/* ===== FULL-SCREEN SEARCH OVERLAY ===== */}
+      <div
+        className={searchOpen ? "app-search-overlay app-search-overlay-active" : "app-search-overlay"}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 100,
+          background: "hsl(0 0% 100%)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          visibility: searchOpen ? "visible" : "hidden",
+          opacity: searchOpen ? 1 : 0,
+          transform: searchOpen ? "translateY(0)" : "translateY(8px)",
+          transition: "opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)",
+          pointerEvents: searchOpen ? "auto" : "none",
+        }}
+      >
+        {/* Search input bar — full width */}
         <div
-          className="sidebar-search"
+          className="app-search-overlay-bar"
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
             display: "flex",
-            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 20px",
+            borderBottom: "1px solid hsl(0 0% 92%)",
+            flexShrink: 0,
           }}
         >
-          {/* Search input bar */}
-          <div
-            className="sidebar-search-bar"
+          <Search size={18} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search"
             style={{
+              flex: 1,
+              fontSize: 16,
+              color: "hsl(220 15% 12%)",
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              padding: "6px 0",
+              letterSpacing: 0.1,
+            }}
+          />
+          <button
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              color: "hsl(220 9% 55%)",
               display: "flex",
               alignItems: "center",
-              gap: 10,
-              background: "hsl(220 14% 96%)",
-              borderRadius: 14,
-              padding: "10px 14px",
-              margin: "0 20px 16px",
+              flexShrink: 0,
+            }}
+            onClick={() => {
+              setSearchOpen(false);
+              setSearchQuery("");
             }}
           >
-            <Search size={18} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search"
-              style={{
-                flex: 1,
-                fontSize: 16,
-                color: "hsl(220 15% 12%)",
-                border: "none",
-                outline: "none",
-                background: "transparent",
-                padding: 0,
-                letterSpacing: 0.1,
-              }}
-            />
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 9% 55%)",
-                display: "flex",
-                alignItems: "center",
-                flexShrink: 0,
-              }}
-              onClick={() => {
-                setSearchOpen(false);
-                setSearchQuery("");
-              }}
-            >
-              <X size={20} strokeWidth={1.8} />
-            </button>
-          </div>
+            <X size={20} strokeWidth={1.8} />
+          </button>
+        </div>
 
-          {/* All conversations list */}
-          <div className="sidebar-search-list" style={{ overflowY: "auto", flex: 1, padding: "0 20px" }}>
-            {searchQuery.trim() ? (
-              filteredConvs.length === 0 ? (
-                <div style={{ color: "hsl(220 9% 55%)", fontSize: 14, textAlign: "center", padding: 40 }}>
-                  未找到匹配的对话
-                </div>
-              ) : (
-                filteredConvs.map((c) => (
-                  <button
-                    key={c.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 12,
-                      width: "100%",
-                      padding: "12px 0",
-                      background: "none",
-                      border: "none",
-                      borderBottom: "1px solid hsl(0 0% 92%)",
-                      cursor: "pointer",
-                      fontSize: 15,
-                      color: "hsl(220 15% 12%)",
-                      fontWeight: 500,
-                      textAlign: "left",
-                    }}
-                    onClick={() => handleSelectConv(c.id)}
-                  >
-                    <Circle size={14} strokeWidth={1.6} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
-                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.title}
-                    </span>
-                  </button>
-                ))
-              )
+        {/* All conversations list */}
+        <div className="app-search-overlay-list" style={{ overflowY: "auto", flex: 1, padding: "8px 0" }}>
+          {searchQuery.trim() ? (
+            filteredConvs.length === 0 ? (
+              <div style={{ color: "hsl(220 9% 55%)", fontSize: 14, textAlign: "center", padding: 40 }}>
+                未找到匹配的对话
+              </div>
             ) : (
-              conversations.map((c) => (
+              filteredConvs.map((c) => (
                 <button
                   key={c.id}
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 12,
+                    gap: 14,
                     width: "100%",
-                    padding: "12px 0",
+                    padding: "14px 20px",
                     background: "none",
                     border: "none",
-                    borderBottom: "1px solid hsl(0 0% 92%)",
                     cursor: "pointer",
-                    fontSize: 15,
+                    fontSize: 16,
                     color: "hsl(220 15% 12%)",
                     fontWeight: 500,
                     textAlign: "left",
@@ -519,8 +499,34 @@ export default function ChatPage() {
                   </span>
                 </button>
               ))
-            )}
-          </div>
+            )
+          ) : (
+            conversations.map((c) => (
+              <button
+                key={c.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  width: "100%",
+                  padding: "14px 20px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  color: "hsl(220 15% 12%)",
+                  fontWeight: 500,
+                  textAlign: "left",
+                }}
+                onClick={() => handleSelectConv(c.id)}
+              >
+                <Circle size={14} strokeWidth={1.6} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.title}
+                </span>
+              </button>
+            ))
+          )}
         </div>
       </div>
 
