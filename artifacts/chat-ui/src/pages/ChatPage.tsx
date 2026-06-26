@@ -553,7 +553,7 @@ export default function ChatPage() {
                         fontSize: 13,
                         color: "hsl(220 9% 55%)",
                         fontWeight: 500,
-                        textAlign: "right",
+                        textAlign: "left",
                         letterSpacing: 0.2,
                       }}
                     >
