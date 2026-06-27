@@ -2323,6 +2323,17 @@ export default function ChatPage() {
           settings={advancedSettings}
           onClose={() => setAdvancedPanelOpen(false)}
           onSettingsChange={(s) => setAdvancedSettings(s)}
+          apiMessages={messages.map((m) => ({
+            role: m.role === "ai" ? "assistant" : "user",
+            content: m.text,
+          }))}
+          thinking={thinking}
+          hasImage={false}
+          multiAnswerEnabled={multiAnswerOpen}
+          onOpenMessageSelector={() => {
+            setAdvancedPanelOpen(false);
+            setMessageSelectorOpen(true);
+          }}
         />
 
         {/* ─── Multi-answer version selection modal ─── */}

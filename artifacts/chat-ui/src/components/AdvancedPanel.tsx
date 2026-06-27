@@ -812,6 +812,7 @@ export default function AdvancedPanel({
                 systemPresetId: "none",
                 customSystemRule: "",
                 contextLimit: 8,
+                manualContextIds: [],
               })
             }
           >
