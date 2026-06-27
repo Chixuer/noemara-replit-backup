@@ -68,6 +68,18 @@ function extractText(raw: unknown): string {
   return "";
 }
 
+function extractFinishReason(raw: unknown): string | undefined {
+  if (typeof raw !== "object" || raw == null) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (Array.isArray(r.choices)) {
+    const first = r.choices[0] as Record<string, unknown> | undefined;
+    if (first && typeof first.finish_reason === "string") {
+      return first.finish_reason;
+    }
+  }
+  return undefined;
+}
+
 const router: IRouter = Router();
 
 router.post("/chat", async (req, res): Promise<void> => {
@@ -179,12 +191,15 @@ router.post("/chat", async (req, res): Promise<void> => {
     }
 
     const text = extractText(raw);
+    const finishReason = extractFinishReason(raw);
+    const truncated = finishReason === "length";
 
     res.json(
       ChatCompletionsResponse.parse({
         text,
         model,
         thinking: config.provider === "kimi" ? true : thinking,
+        truncated,
       }),
     );
   } catch (err) {

@@ -46,6 +46,9 @@ export interface ModelCapabilities {
 
   // Whether multi-answer (temperature sweep) is allowed
   supportsMultiAnswer: boolean;
+
+  // Approximate max output tokens the model supports (for preview display only)
+  maxOutputTokens?: number;
 }
 
 export const MODEL_CAPABILITIES: Record<ModelId, ModelCapabilities> = {
@@ -63,6 +66,7 @@ export const MODEL_CAPABILITIES: Record<ModelId, ModelCapabilities> = {
     defaultTopP: 1.0,
     thinkingMode: "supported",
     supportsMultiAnswer: true,
+    maxOutputTokens: 8192,
   },
   "qwen3.7-plus": {
     modelId: "qwen3.7-plus",
@@ -78,6 +82,7 @@ export const MODEL_CAPABILITIES: Record<ModelId, ModelCapabilities> = {
     defaultTopP: 1.0,
     thinkingMode: "supported",
     supportsMultiAnswer: true,
+    maxOutputTokens: 8192,
   },
   "kimi-k2.7-code": {
     modelId: "kimi-k2.7-code",
@@ -89,6 +94,7 @@ export const MODEL_CAPABILITIES: Record<ModelId, ModelCapabilities> = {
     fixedTopP: 1.0,
     thinkingMode: "always_on",
     supportsMultiAnswer: false,
+    maxOutputTokens: 32768,
   },
   "kimi-k2.7-code-highspeed": {
     modelId: "kimi-k2.7-code-highspeed",
@@ -100,6 +106,7 @@ export const MODEL_CAPABILITIES: Record<ModelId, ModelCapabilities> = {
     fixedTopP: 1.0,
     thinkingMode: "always_on",
     supportsMultiAnswer: false,
+    maxOutputTokens: 32768,
   },
 };
 

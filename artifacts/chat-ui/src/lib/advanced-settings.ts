@@ -4,13 +4,14 @@
  */
 
 export const CONTEXT_LIMIT_OPTIONS = [
-  { value: 4, label: "最近 4 条消息" },
-  { value: 8, label: "最近 8 条消息" },
-  { value: 16, label: "最近 16 条消息" },
-  { value: -1, label: "当前全部消息" },
+  { value: 4,        label: "最近 4 条消息" },
+  { value: 8,        label: "最近 8 条消息" },
+  { value: 16,       label: "最近 16 条消息" },
+  { value: -1,       label: "当前全部消息" },
+  { value: "manual", label: "手动选择" },
 ] as const;
 
-export type ContextLimitValue = -1 | 4 | 8 | 16;
+export type ContextLimitValue = -1 | 4 | 8 | 16 | "manual";
 
 export const SYSTEM_PRESETS = [
   { id: "none", label: "默认", rule: "" },
@@ -60,8 +61,10 @@ export interface AdvancedSettings {
   systemPresetId: SystemPresetId;
   /** Custom system rule text (used when systemPresetId === 'custom') */
   customSystemRule: string;
-  /** How many recent messages to include (-1 = all) */
+  /** How many recent messages to include (-1 = all, "manual" = manualContextIds) */
   contextLimit: ContextLimitValue;
+  /** Message IDs to include when contextLimit === "manual" */
+  manualContextIds: string[];
 }
 
 const DEFAULT_SETTINGS: AdvancedSettings = {
@@ -71,6 +74,7 @@ const DEFAULT_SETTINGS: AdvancedSettings = {
   systemPresetId: "none",
   customSystemRule: "",
   contextLimit: 8,
+  manualContextIds: [],
 };
 
 function storageKey(modelId: string): string {
@@ -121,12 +125,12 @@ export function getActivePresetLabel(
 /**
  * Apply context limit to a messages array.
  * Keeps the last `limit` messages in chronological order.
- * -1 means keep all messages.
+ * -1 means keep all messages. "manual" means caller handles filtering — returns all.
  */
 export function applyContextLimit<T>(messages: T[], limit: ContextLimitValue): T[] {
-  if (limit === -1) return messages;
-  if (messages.length <= limit) return messages;
-  return messages.slice(-limit);
+  if (limit === -1 || limit === "manual") return messages;
+  if (messages.length <= (limit as number)) return messages;
+  return messages.slice(-(limit as number));
 }
 
 /** Rough token estimation: ~4 chars per token */

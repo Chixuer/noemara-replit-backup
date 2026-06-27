@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import VoiceRecorder from "../components/VoiceRecorder";
 import AdvancedPanel from "../components/AdvancedPanel";
+import MessageSelector from "../components/MessageSelector";
 import {
   useChatCompletions,
   useListConversations,
@@ -61,6 +62,8 @@ interface Message {
   thinking?: boolean;
   multiAnswer?: MultiAnswerVersion[];
   multiAnswerActiveIdx?: number;
+  /** True when the model stopped because it hit the max token limit */
+  truncated?: boolean;
 }
 
 interface Conversation {
@@ -178,6 +181,7 @@ export default function ChatPage() {
   const [multiAnswerPending, setMultiAnswerPending] = useState(false);
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>(["balanced"]);
   const [sendDropdownOpen, setSendDropdownOpen] = useState(false);
+  const [messageSelectorOpen, setMessageSelectorOpen] = useState(false);
   // voiceMounted: whether VoiceRecorder is in the DOM (includes exit-animation window)
   const [voiceMounted, setVoiceMounted] = useState(false);
   // voiceActive: opacity target — true = recorder visible, false = input visible
@@ -757,6 +761,101 @@ export default function ChatPage() {
           : c
       )
     );
+  };
+
+  /** Delete one version from a multi-answer card; collapses to normal msg if 1 remains */
+  const handleDeleteVersion = (msgId: string, versionIdx: number) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? {
+              ...c,
+              messages: c.messages.map((m) => {
+                if (m.id !== msgId || !m.multiAnswer) return m;
+                const next = m.multiAnswer.filter((_, i) => i !== versionIdx);
+                if (next.length === 0) return m;
+                if (next.length === 1) {
+                  return { ...m, text: next[0].text, multiAnswer: undefined, multiAnswerActiveIdx: undefined };
+                }
+                const newIdx = Math.min(m.multiAnswerActiveIdx ?? 0, next.length - 1);
+                return { ...m, multiAnswer: next, multiAnswerActiveIdx: newIdx };
+              }),
+            }
+          : c
+      )
+    );
+  };
+
+  /** Append a continuation to a truncated AI message */
+  const handleContinueGeneration = async (msgId: string) => {
+    const conv = conversations.find((c) => c.id === activeId);
+    if (!conv) return;
+    const msgIndex = conv.messages.findIndex((m) => m.id === msgId);
+    if (msgIndex === -1) return;
+
+    // Clear the truncated flag immediately so the button disappears
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, truncated: false } : m) }
+          : c
+      )
+    );
+    setReplying(true);
+
+    try {
+      const contextMsgs = conv.messages.slice(0, msgIndex + 1);
+      const rawHistory: ChatMessage[] = contextMsgs.map((m) => ({
+        role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
+        content: m.text,
+      }));
+      const continuePrompt: ChatMessage = {
+        role: "user",
+        content: "请从上文中断处继续，不要重复已经输出的内容。",
+      };
+      const systemRule = getSystemRule(advancedSettings);
+      const apiMessages: ChatMessage[] = [
+        ...(systemRule ? [{ role: "system" as const, content: systemRule }] : []),
+        ...rawHistory,
+        continuePrompt,
+      ];
+
+      const result = await chatMutation.mutateAsync({
+        data: {
+          model: modelId as ChatCompletionInputModel,
+          messages: apiMessages,
+          thinking,
+          temperature: advancedSettings.temperature,
+          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
+        },
+      });
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === msgId
+                    ? { ...m, text: m.text + "\n\n" + result.text, truncated: result.truncated ?? false }
+                    : m
+                ),
+              }
+            : c
+        )
+      );
+    } catch {
+      // Restore truncated flag so user can retry
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId
+            ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, truncated: true } : m) }
+            : c
+        )
+      );
+    } finally {
+      setReplying(false);
+    }
   };
 
   /** Convert a multi-answer version into a normal AI message */

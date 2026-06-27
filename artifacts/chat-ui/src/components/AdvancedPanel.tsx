@@ -24,6 +24,10 @@ interface AdvancedPanelProps {
   apiMessages?: Array<{ role: string; content: string }>;
   thinking?: boolean;
   hasImage?: boolean;
+  /** Whether multi-answer mode is currently enabled (for preview) */
+  multiAnswerEnabled?: boolean;
+  /** Callback to open the manual message selector modal */
+  onOpenMessageSelector?: () => void;
 }
 
 const TEMP_PRESETS = [
@@ -119,6 +123,8 @@ export default function AdvancedPanel({
   apiMessages = [],
   thinking = false,
   hasImage = false,
+  multiAnswerEnabled = false,
+  onOpenMessageSelector,
 }: AdvancedPanelProps) {
   const caps = getCapabilities(modelId);
   const [topPWarning, setTopPWarning] = useState(false);
@@ -150,7 +156,9 @@ export default function AdvancedPanel({
   const contextCount =
     settings.contextLimit === -1
       ? apiMessages.length
-      : Math.min(apiMessages.length, settings.contextLimit);
+      : settings.contextLimit === "manual"
+        ? settings.manualContextIds.length
+        : Math.min(apiMessages.length, settings.contextLimit as number);
 
   const activePresetObj = SYSTEM_PRESETS.find(
     (p) => p.id === settings.systemPresetId
@@ -513,14 +521,12 @@ export default function AdvancedPanel({
                 const isActive = settings.contextLimit === opt.value;
                 return (
                   <button
-                    key={opt.value}
+                    key={String(opt.value)}
                     style={{
                       padding: "6px 14px",
                       borderRadius: 20,
                       border: `1.5px solid ${isActive ? "hsl(35 85% 52%)" : "hsl(0 0% 88%)"}`,
-                      background: isActive
-                        ? "hsl(35 85% 52%)"
-                        : "hsl(0 0% 100%)",
+                      background: isActive ? "hsl(35 85% 52%)" : "hsl(0 0% 100%)",
                       color: isActive ? "#fff" : "hsl(220 15% 20%)",
                       fontSize: 13,
                       fontWeight: isActive ? 600 : 400,
@@ -536,13 +542,33 @@ export default function AdvancedPanel({
                 );
               })}
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "hsl(220 9% 55%)",
-                marginTop: 8,
-              }}
-            >
+            {/* Manual selector trigger */}
+            {settings.contextLimit === "manual" && (
+              <button
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 14px",
+                  borderRadius: 12,
+                  border: "1.5px solid hsl(220 80% 60%)",
+                  background: "hsl(220 80% 97%)",
+                  color: "hsl(220 60% 40%)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  width: "100%",
+                  justifyContent: "center",
+                }}
+                onClick={onOpenMessageSelector}
+              >
+                {settings.manualContextIds.length > 0
+                  ? `已选 ${settings.manualContextIds.length} 条消息 — 点击修改`
+                  : "选择要带入的消息…"}
+              </button>
+            )}
+            <div style={{ fontSize: 12, color: "hsl(220 9% 55%)", marginTop: 8 }}>
               目标是让你在"连续深入讨论"和"节省 token、减少旧上下文干扰"之间自由选择。
             </div>
           </Section>
@@ -727,7 +753,9 @@ export default function AdvancedPanel({
                 <span style={{ color: "hsl(220 9% 55%)" }}>上下文：</span>
                 {settings.contextLimit === -1
                   ? `全部消息（${apiMessages.length} 条）`
-                  : `最近 ${settings.contextLimit} 条（实际 ${contextCount} 条）`}
+                  : settings.contextLimit === "manual"
+                    ? `手动选择（${contextCount} 条）`
+                    : `最近 ${settings.contextLimit} 条（实际 ${contextCount} 条）`}
               </div>
               {hasImage && (
                 <div>
@@ -738,6 +766,16 @@ export default function AdvancedPanel({
               <div>
                 <span style={{ color: "hsl(220 9% 55%)" }}>预估输入 token：</span>
                 约 {totalEstimated}
+              </div>
+              <div>
+                <span style={{ color: "hsl(220 9% 55%)" }}>最大输出 token：</span>
+                {caps?.maxOutputTokens
+                  ? `${caps.maxOutputTokens.toLocaleString()} tokens`
+                  : "模型默认"}
+              </div>
+              <div>
+                <span style={{ color: "hsl(220 9% 55%)" }}>同题多答：</span>
+                {multiAnswerEnabled ? "是" : "否"}
               </div>
               <div
                 style={{

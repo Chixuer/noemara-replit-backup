@@ -10,4 +10,6 @@ export interface ChatCompletionResult {
   text: string;
   model?: string;
   thinking?: boolean;
+  /** True if the model stopped due to max token limit (finish_reason=length) */
+  truncated?: boolean;
 }

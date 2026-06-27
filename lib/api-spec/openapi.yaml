@@ -345,6 +345,9 @@ components:
           type: string
         thinking:
           type: boolean
+        truncated:
+          type: boolean
+          description: True if the model stopped due to max token limit (finish_reason=length)
     ErrorResponse:
       type: object
       required:

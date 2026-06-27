@@ -65,7 +65,8 @@ export const ChatCompletionsBody = zod.object({
 export const ChatCompletionsResponse = zod.object({
   "text": zod.string(),
   "model": zod.string().optional(),
-  "thinking": zod.boolean().optional()
+  "thinking": zod.boolean().optional(),
+  "truncated": zod.boolean().optional().describe('True if the model stopped due to max token limit (finish_reason=length)')
 })
 
 
