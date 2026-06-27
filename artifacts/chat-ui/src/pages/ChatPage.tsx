@@ -1220,19 +1220,17 @@ export default function ChatPage() {
                   className="msg-bubble-ai"
                   style={{ display: "flex", flexDirection: "column", gap: 10 }}
                 >
-                  {msg.thinking && (
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 14,
-                        color: "hsl(220 9% 60%)",
-                        fontStyle: "italic",
-                        paddingLeft: 2,
-                      }}
-                    >
-                      Thought for a second
-                    </p>
-                  )}
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 14,
+                      color: "hsl(220 9% 60%)",
+                      fontStyle: "italic",
+                      paddingLeft: 2,
+                    }}
+                  >
+                    Thought for a second
+                  </p>
                   <p
                     style={{
                       margin: 0,
@@ -1421,6 +1419,25 @@ export default function ChatPage() {
                 </div>
               );
             })
+          )}
+          {replying && (
+            <div
+              className="msg-bubble-ai anim-fade-in"
+              style={{ display: "flex", flexDirection: "column", gap: 10 }}
+            >
+              <p
+                className="anim-thinking-dots"
+                style={{
+                  margin: 0,
+                  fontSize: 14,
+                  color: "hsl(220 9% 60%)",
+                  fontStyle: "italic",
+                  paddingLeft: 2,
+                }}
+              >
+                Thinking<span>.</span><span>.</span><span>.</span>
+              </p>
+            </div>
           )}
         </div>
 
