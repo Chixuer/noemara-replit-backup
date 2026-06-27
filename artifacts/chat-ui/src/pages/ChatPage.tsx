@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Layers,
   BookmarkCheck,
+  Download,
 } from "lucide-react";
 import VoiceRecorder from "../components/VoiceRecorder";
 import AdvancedPanel from "../components/AdvancedPanel";
@@ -414,6 +415,34 @@ export default function ChatPage() {
     setSidebarOpen(false);
     setSearchOpen(false);
     setSearchQuery("");
+  };
+
+  const handleExport = (format: "md" | "txt") => {
+    const msgs = activeConv?.messages ?? [];
+    const title = activeConv?.title ?? "对话";
+    let content = "";
+    if (format === "md") {
+      content = `# ${title}\n\n`;
+      for (const m of msgs) {
+        const role = m.role === "user" ? "**你**" : "**AI**";
+        content += `${role}\n\n${m.text}\n\n---\n\n`;
+      }
+    } else {
+      content = `${title}\n${"=".repeat(title.length)}\n\n`;
+      for (const m of msgs) {
+        const role = m.role === "user" ? "你" : "AI";
+        content += `[${role}]\n${m.text}\n\n`;
+      }
+    }
+    const ext = format === "md" ? "md" : "txt";
+    const safe = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safe}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handlePinConv = (id: string) => {
@@ -1480,6 +1509,53 @@ export default function ChatPage() {
                   {activeConv.pinned ? <PinOff size={18} strokeWidth={1.8} /> : <Pin size={18} strokeWidth={1.8} />}
                   {activeConv.pinned ? "Unpin" : "Pin"}
                 </button>
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    width: "100%",
+                    padding: "10px 16px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 15,
+                    color: "hsl(220 15% 10%)",
+                    fontWeight: 500,
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    handleExport("md");
+                    setTopMenuOpen(false);
+                  }}
+                >
+                  <Download size={18} strokeWidth={1.8} />
+                  导出 Markdown
+                </button>
+                <button
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    width: "100%",
+                    padding: "10px 16px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 15,
+                    color: "hsl(220 15% 10%)",
+                    fontWeight: 500,
+                    textAlign: "left",
+                  }}
+                  onClick={() => {
+                    handleExport("txt");
+                    setTopMenuOpen(false);
+                  }}
+                >
+                  <Download size={18} strokeWidth={1.8} />
+                  导出纯文本
+                </button>
+                <div style={{ height: 1, background: "hsl(0 0% 92%)", margin: "4px 0" }} />
                 <button
                   style={{
                     display: "flex",
