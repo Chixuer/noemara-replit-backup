@@ -18,16 +18,39 @@ import {
   Search,
   Sparkles,
   Zap,
+  SlidersHorizontal,
+  ChevronDown,
+  Layers,
+  BookmarkCheck,
 } from "lucide-react";
 import VoiceRecorder from "../components/VoiceRecorder";
+import AdvancedPanel from "../components/AdvancedPanel";
 import { useChatCompletions } from "@workspace/api-client-react";
-import type { ChatCompletionInput, ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
+import type { ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
+import {
+  loadSettings,
+  saveSettings,
+  getSystemRule,
+  getActivePresetLabel,
+  applyContextLimit,
+  type AdvancedSettings,
+} from "../lib/advanced-settings";
+
+interface MultiAnswerVersion {
+  label: string;
+  temperature: number;
+  text: string;
+  error?: string;
+  bookmarked?: boolean;
+}
 
 interface Message {
   id: string;
   role: "user" | "ai";
   text: string;
   thinking?: boolean;
+  multiAnswer?: MultiAnswerVersion[];
+  multiAnswerActiveIdx?: number;
 }
 
 interface Conversation {
@@ -54,6 +77,12 @@ const CHAT_MODELS: ChatModel[] = [
 ];
 
 const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+
+const MULTI_ANSWER_VERSIONS = [
+  { id: "precise", label: "稳定版", temperature: 0.2 },
+  { id: "balanced", label: "平衡版", temperature: 0.7 },
+  { id: "creative", label: "创意版", temperature: 1.2 },
+];
 
 function isThinkingModel(modelId: string) {
   return CHAT_MODELS.find((m) => m.id === modelId)?.supportsThinking ?? false;
@@ -108,6 +137,14 @@ export default function ChatPage() {
   const [toast, setToast] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [advancedPanelOpen, setAdvancedPanelOpen] = useState(false);
+  const [advancedSettings, setAdvancedSettings] = useState<AdvancedSettings>(
+    () => loadSettings(DEFAULT_MODEL_ID)
+  );
+  const [multiAnswerOpen, setMultiAnswerOpen] = useState(false);
+  const [multiAnswerPending, setMultiAnswerPending] = useState(false);
+  const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>(["balanced"]);
+  const [sendDropdownOpen, setSendDropdownOpen] = useState(false);
   // voiceMounted: whether VoiceRecorder is in the DOM (includes exit-animation window)
   const [voiceMounted, setVoiceMounted] = useState(false);
   // voiceActive: opacity target — true = recorder visible, false = input visible
@@ -150,6 +187,16 @@ export default function ChatPage() {
     }
   }, [searchOpen]);
 
+  // Reload saved settings when model changes
+  useEffect(() => {
+    setAdvancedSettings(loadSettings(modelId));
+  }, [modelId]);
+
+  // Persist settings to localStorage whenever they change
+  useEffect(() => {
+    saveSettings(modelId, advancedSettings);
+  }, [modelId, advancedSettings]);
+
   const updateActiveMessages = (msgs: Message[]) => {
     setConversations((prev) =>
       prev.map((c) =>
@@ -182,15 +229,24 @@ export default function ChatPage() {
     setReplying(true);
 
     try {
-      const apiMessages: ChatMessage[] = newMessages.map((m) => ({
-        role: m.role === "ai" ? "assistant" : "user",
+      // Apply context limit and system preset
+      const rawMessages: ChatMessage[] = newMessages.map((m) => ({
+        role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
         content: m.text,
       }));
+      const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
+      const systemRule = getSystemRule(advancedSettings);
+      const apiMessages: ChatMessage[] = systemRule
+        ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
+        : limitedMessages;
+
       const result = await chatMutation.mutateAsync({
         data: {
           model: modelId as ChatCompletionInputModel,
           messages: apiMessages,
           thinking,
+          temperature: advancedSettings.temperature,
+          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
         },
       });
       const aiMsg: Message = {
@@ -313,15 +369,23 @@ export default function ChatPage() {
     setReplying(true);
 
     try {
-      const apiMessages: ChatMessage[] = newMessages.map((m) => ({
-        role: m.role === "ai" ? "assistant" : "user",
+      const rawMessages: ChatMessage[] = newMessages.map((m) => ({
+        role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
         content: m.text,
       }));
+      const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
+      const systemRule = getSystemRule(advancedSettings);
+      const apiMessages: ChatMessage[] = systemRule
+        ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
+        : limitedMessages;
+
       const result = await chatMutation.mutateAsync({
         data: {
           model: modelId as ChatCompletionInputModel,
           messages: apiMessages,
           thinking,
+          temperature: advancedSettings.temperature,
+          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
         },
       });
       const aiMsg: Message = {
@@ -346,6 +410,157 @@ export default function ChatPage() {
 
   const handleVoiceCancel = () => {
     stopVoice();
+  };
+
+  /** Multi-version generation: sends the same prompt with different temperatures in parallel */
+  const handleSendMultiAnswer = async (versionIds: string[]) => {
+    const text = inputText.trim();
+    if (!text || versionIds.length === 0) return;
+
+    const selectedVers = MULTI_ANSWER_VERSIONS.filter((v) => versionIds.includes(v.id));
+    if (selectedVers.length === 0) return;
+
+    const userMsg: Message = { id: generateId(), role: "user", text };
+    const newMessages = [...messages, userMsg];
+    updateActiveMessages(newMessages);
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId && c.title === "新对话"
+          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+          : c.id === activeId
+            ? { ...c, updatedAt: Date.now() }
+            : c
+      )
+    );
+
+    setInputText("");
+    setMultiAnswerOpen(false);
+    setMultiAnswerPending(true);
+    setReplying(true);
+
+    const rawMessages: ChatMessage[] = newMessages.map((m) => ({
+      role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
+      content: m.text,
+    }));
+    const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
+    const systemRule = getSystemRule(advancedSettings);
+    const apiMessages: ChatMessage[] = systemRule
+      ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
+      : limitedMessages;
+
+    try {
+      const BASE = (import.meta.env.BASE_URL ?? "").replace(/\/$/, "");
+      const response = await fetch(`${BASE}/api/multi-answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: modelId,
+          messages: apiMessages,
+          thinking,
+          versions: selectedVers.map((v) => ({
+            label: v.label,
+            temperature: v.temperature,
+          })),
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "请求失败" })) as { error?: string };
+        throw new Error(err.error ?? "Multi-answer request failed");
+      }
+      const data = await response.json() as {
+        results: Array<{ label: string; temperature: number; text: string; error?: string }>;
+      };
+      const versions: MultiAnswerVersion[] = data.results.map((r) => ({
+        label: r.label,
+        temperature: r.temperature,
+        text: r.text || r.error || "",
+        error: r.error,
+      }));
+
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: versions[0]?.text ?? "",
+        thinking: true,
+        multiAnswer: versions,
+        multiAnswerActiveIdx: 0,
+      };
+      updateActiveMessages([...newMessages, aiMsg]);
+    } catch (err) {
+      const errorText = err instanceof Error ? err.message : "请求失败";
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: `同题多答失败：${errorText}`,
+      };
+      updateActiveMessages([...newMessages, aiMsg]);
+    } finally {
+      setReplying(false);
+      setMultiAnswerPending(false);
+    }
+  };
+
+  /** Toggle bookmark on a multi-answer version */
+  const handleBookmarkVersion = (msgId: string, versionIdx: number) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === msgId && m.multiAnswer
+                  ? {
+                      ...m,
+                      multiAnswer: m.multiAnswer.map((v, i) =>
+                        i === versionIdx ? { ...v, bookmarked: !v.bookmarked } : v
+                      ),
+                    }
+                  : m
+              ),
+            }
+          : c
+      )
+    );
+  };
+
+  /** Convert a multi-answer version into a normal AI message */
+  const handleExpandVersion = (msgId: string, versionIdx: number) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === msgId && m.multiAnswer
+                  ? {
+                      ...m,
+                      text: m.multiAnswer[versionIdx]?.text ?? m.text,
+                      multiAnswer: undefined,
+                      multiAnswerActiveIdx: undefined,
+                    }
+                  : m
+              ),
+            }
+          : c
+      )
+    );
+  };
+
+  /** Switch active tab in multi-answer comparison */
+  const handleSetActiveVersion = (msgId: string, idx: number) => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === msgId ? { ...m, multiAnswerActiveIdx: idx } : m
+              ),
+            }
+          : c
+      )
+    );
   };
 
   return (
@@ -1146,6 +1361,103 @@ export default function ChatPage() {
                 );
               }
 
+              // ── Multi-answer comparison card ──
+              if (msg.multiAnswer && msg.multiAnswer.length > 0) {
+                const activeIdx = msg.multiAnswerActiveIdx ?? 0;
+                const activeVersion = msg.multiAnswer[activeIdx];
+                return (
+                  <div
+                    key={msg.id}
+                    className="msg-bubble-ai anim-fade-in"
+                    style={{ display: "flex", flexDirection: "column", gap: 10 }}
+                  >
+                    {/* Version tabs */}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <Layers size={13} strokeWidth={1.8} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
+                      {msg.multiAnswer.map((v, i) => (
+                        <button
+                          key={i}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: 16,
+                            border: `1.5px solid ${activeIdx === i ? "hsl(220 80% 55%)" : "hsl(0 0% 88%)"}`,
+                            background: activeIdx === i ? "hsl(220 80% 55%)" : "hsl(0 0% 100%)",
+                            color: activeIdx === i ? "#fff" : "hsl(220 15% 25%)",
+                            fontSize: 12,
+                            fontWeight: activeIdx === i ? 600 : 400,
+                            cursor: "pointer",
+                          }}
+                          onClick={() => handleSetActiveVersion(msg.id, i)}
+                        >
+                          {v.label}
+                          <span style={{ marginLeft: 4, opacity: 0.65 }}>T={v.temperature}</span>
+                          {v.bookmarked && " ★"}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Active version text */}
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 16,
+                        color: activeVersion?.error ? "hsl(0 65% 45%)" : "hsl(220 15% 12%)",
+                        lineHeight: 1.6,
+                        letterSpacing: 0.1,
+                      }}
+                    >
+                      {activeVersion?.error
+                        ? `⚠️ ${activeVersion.error}`
+                        : (activeVersion?.text ?? "")}
+                    </p>
+                    {/* Action row */}
+                    <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 2 }}>
+                      <button
+                        style={{
+                          background: "none", border: "none", padding: 0, cursor: "pointer",
+                          color: copiedMsgId === msg.id ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
+                          display: "flex", alignItems: "center",
+                        }}
+                        onClick={() => handleCopy(msg.id, activeVersion?.text ?? "")}
+                      >
+                        {copiedMsgId === msg.id ? <Check size={16} strokeWidth={2.5} /> : <Copy size={16} strokeWidth={1.7} />}
+                      </button>
+                      <button
+                        style={{
+                          background: "none", border: "none", padding: 0, cursor: "pointer",
+                          color: activeVersion?.bookmarked ? "hsl(45 90% 45%)" : "hsl(220 9% 55%)",
+                          display: "flex", alignItems: "center",
+                        }}
+                        onClick={() => handleBookmarkVersion(msg.id, activeIdx)}
+                      >
+                        <BookmarkCheck size={16} strokeWidth={1.7} />
+                      </button>
+                      <button
+                        style={{
+                          padding: "4px 12px",
+                          borderRadius: 14,
+                          border: "1.5px solid hsl(142 60% 42%)",
+                          background: "none",
+                          color: "hsl(142 60% 35%)",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                        onClick={() => handleExpandVersion(msg.id, activeIdx)}
+                      >
+                        继续此版本
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div
                   key={msg.id}
@@ -1331,6 +1643,99 @@ export default function ChatPage() {
             background: "hsl(60 8% 96%)",
           }}
         >
+          {/* Active preset label + settings button row */}
+          {(() => {
+            const presetLabel = getActivePresetLabel(advancedSettings);
+            const caps = CHAT_MODELS.find((m) => m.id === modelId);
+            return (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 6,
+                  minHeight: 24,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {presetLabel && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "2px 10px",
+                        borderRadius: 12,
+                        background: "hsl(142 55% 92%)",
+                        color: "hsl(142 60% 28%)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span>{presetLabel}</span>
+                      <button
+                        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", display: "flex" }}
+                        onClick={() =>
+                          setAdvancedSettings((s) => ({ ...s, systemPresetId: "none" }))
+                        }
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  )}
+                  {advancedSettings.contextLimit !== 8 && (
+                    <div
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 12,
+                        background: "hsl(35 80% 92%)",
+                        color: "hsl(35 60% 30%)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {advancedSettings.contextLimit === -1 ? "全部上下文" : `最近 ${advancedSettings.contextLimit} 条`}
+                    </div>
+                  )}
+                  {advancedSettings.temperature !== undefined && (
+                    <div
+                      style={{
+                        padding: "2px 10px",
+                        borderRadius: 12,
+                        background: "hsl(220 80% 94%)",
+                        color: "hsl(220 60% 35%)",
+                        fontSize: 12,
+                        fontWeight: 600,
+                      }}
+                    >
+                      T={advancedSettings.temperature}
+                    </div>
+                  )}
+                  {!caps && null}
+                </div>
+                <button
+                  style={{
+                    background: advancedPanelOpen ? "hsl(220 14% 88%)" : "none",
+                    border: "none",
+                    borderRadius: 10,
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    color: advancedPanelOpen ? "hsl(220 15% 15%)" : "hsl(220 9% 50%)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                  }}
+                  onClick={() => setAdvancedPanelOpen((v) => !v)}
+                >
+                  <SlidersHorizontal size={14} strokeWidth={1.8} />
+                  高级设置
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Pill container — two layers cross-fade inside */}
           <div
             style={{
@@ -1392,32 +1797,84 @@ export default function ChatPage() {
                 </button>
               )}
 
-              <button
-                className="btn-circle"
-                style={{
-                  background: "hsl(142 72% 36%)", border: "none",
-                  borderRadius: "50%", width: 38, height: 38,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", flexShrink: 0, padding: 0,
-                  transition: "background 0.2s ease",
-                }}
-                onClick={handleSend}
-              >
-                {inputText ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : (
-                  <svg width="20" height="14" viewBox="0 0 20 14" fill="none">
-                    <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
-                    <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                    <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
-                    <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
-                    <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
-                    <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
-                  </svg>
+              {/* Send button + multi-answer dropdown */}
+              <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                <button
+                  className="btn-circle"
+                  style={{
+                    background: "hsl(142 72% 36%)", border: "none",
+                    borderRadius: "50%", width: 38, height: 38,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", padding: 0,
+                    transition: "background 0.2s ease",
+                  }}
+                  onClick={handleSend}
+                >
+                  {inputText ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg width="20" height="14" viewBox="0 0 20 14" fill="none">
+                      <rect x="0" y="5" width="2.2" height="4" rx="1.1" fill="white" />
+                      <rect x="3.2" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                      <rect x="6.4" y="0" width="2.2" height="14" rx="1.1" fill="white" />
+                      <rect x="9.6" y="3" width="2.2" height="8" rx="1.1" fill="white" />
+                      <rect x="12.8" y="1.5" width="2.2" height="11" rx="1.1" fill="white" />
+                      <rect x="16" y="4" width="2.2" height="6" rx="1.1" fill="white" />
+                    </svg>
+                  )}
+                </button>
+                {/* Multi-answer dropdown chevron */}
+                {inputText && (
+                  <div style={{ position: "relative" }}>
+                    <button
+                      style={{
+                        background: "none", border: "none", padding: "2px 2px",
+                        cursor: "pointer", color: "hsl(142 60% 32%)",
+                        display: "flex", alignItems: "center",
+                      }}
+                      onClick={() => setSendDropdownOpen((v) => !v)}
+                    >
+                      <ChevronDown size={15} strokeWidth={2.2} />
+                    </button>
+                    {sendDropdownOpen && (
+                      <div
+                        className="anim-fade-in-scale"
+                        style={{
+                          position: "absolute",
+                          bottom: 30,
+                          right: 0,
+                          background: "hsl(0 0% 100%)",
+                          borderRadius: 14,
+                          boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+                          padding: "8px 0",
+                          minWidth: 180,
+                          zIndex: 100,
+                        }}
+                      >
+                        <button
+                          style={{
+                            display: "flex", alignItems: "center", gap: 10,
+                            width: "100%", padding: "10px 16px",
+                            background: "none", border: "none",
+                            cursor: "pointer", fontSize: 14,
+                            color: "hsl(220 15% 10%)", fontWeight: 500,
+                            textAlign: "left",
+                          }}
+                          onClick={() => {
+                            setSendDropdownOpen(false);
+                            setMultiAnswerOpen(true);
+                          }}
+                        >
+                          <Layers size={16} strokeWidth={1.8} />
+                          同题多答…
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
             </div>
 
             {/* ── Voice recorder layer (cross-fades over input) ── */}
@@ -1444,6 +1901,121 @@ export default function ChatPage() {
             )}
           </div>
         </div>
+
+        {/* ─── Advanced Panel (bottom sheet) ─── */}
+        <AdvancedPanel
+          open={advancedPanelOpen}
+          modelId={modelId}
+          settings={advancedSettings}
+          onClose={() => setAdvancedPanelOpen(false)}
+          onSettingsChange={(s) => setAdvancedSettings(s)}
+        />
+
+        {/* ─── Multi-answer version selection modal ─── */}
+        {multiAnswerOpen && (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              background: "rgba(0,0,0,0.35)",
+              display: "flex", alignItems: "flex-end",
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setMultiAnswerOpen(false);
+            }}
+          >
+            <div
+              className="anim-slide-up"
+              style={{
+                width: "100%", background: "hsl(0 0% 100%)",
+                borderRadius: "24px 24px 0 0",
+                padding: "24px 20px 40px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Layers size={18} strokeWidth={1.8} style={{ color: "hsl(220 60% 50%)" }} />
+                  <span style={{ fontSize: 17, fontWeight: 700, color: "hsl(220 15% 10%)" }}>同题多答</span>
+                </div>
+                <button
+                  style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: "hsl(220 9% 50%)" }}
+                  onClick={() => setMultiAnswerOpen(false)}
+                >
+                  <X size={20} strokeWidth={2} />
+                </button>
+              </div>
+              <p style={{ margin: "0 0 16px", fontSize: 13, color: "hsl(220 9% 50%)", lineHeight: 1.5 }}>
+                选择要生成的版本（将并发调用 AI，消耗更多 Token）
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                {MULTI_ANSWER_VERSIONS.map((v) => {
+                  const selected = selectedVersionIds.includes(v.id);
+                  return (
+                    <button
+                      key={v.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "12px 16px",
+                        borderRadius: 16,
+                        border: `1.5px solid ${selected ? "hsl(220 80% 55%)" : "hsl(0 0% 88%)"}`,
+                        background: selected ? "hsl(220 80% 97%)" : "hsl(0 0% 100%)",
+                        cursor: "pointer", textAlign: "left",
+                      }}
+                      onClick={() =>
+                        setSelectedVersionIds((prev) =>
+                          prev.includes(v.id)
+                            ? prev.filter((x) => x !== v.id)
+                            : [...prev, v.id]
+                        )
+                      }
+                    >
+                      <div
+                        style={{
+                          width: 20, height: 20,
+                          borderRadius: 6,
+                          border: `2px solid ${selected ? "hsl(220 80% 55%)" : "hsl(0 0% 75%)"}`,
+                          background: selected ? "hsl(220 80% 55%)" : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {selected && <Check size={12} strokeWidth={3} style={{ color: "#fff" }} />}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: "hsl(220 15% 10%)" }}>
+                          {v.label}
+                          <span style={{ marginLeft: 8, fontSize: 12, color: "hsl(220 9% 55%)", fontWeight: 400 }}>
+                            temperature = {v.temperature}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                disabled={selectedVersionIds.length === 0 || multiAnswerPending}
+                style={{
+                  width: "100%",
+                  padding: "14px 0",
+                  borderRadius: 20,
+                  background: selectedVersionIds.length === 0
+                    ? "hsl(0 0% 88%)"
+                    : "hsl(220 80% 55%)",
+                  color: selectedVersionIds.length === 0 ? "hsl(220 9% 55%)" : "#fff",
+                  border: "none",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  cursor: selectedVersionIds.length === 0 ? "not-allowed" : "pointer",
+                }}
+                onClick={() => handleSendMultiAnswer(selectedVersionIds)}
+              >
+                {multiAnswerPending
+                  ? "生成中…"
+                  : `生成 ${selectedVersionIds.length} 个版本`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

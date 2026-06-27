@@ -3,6 +3,11 @@ import {
   ChatCompletionsBody,
   ChatCompletionsResponse,
 } from "@workspace/api-zod";
+import {
+  getCapabilities,
+  resolveTemperature,
+  resolveTopP,
+} from "@workspace/model-capabilities";
 
 type Provider = "deepseek" | "qwen" | "kimi";
 
@@ -40,7 +45,6 @@ const PROVIDER_CONFIGS: Record<
   },
   qwen: {
     url: process.env.QWEN_API_URL ?? "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-    // Qwen is served through DashScope, so fall back to the existing DashScope key.
     key: process.env.QWEN_API_KEY ?? process.env.DASHSCOPE_API_KEY,
   },
   kimi: {
@@ -74,10 +78,17 @@ router.post("/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const { model, messages, thinking } = parsed.data;
+  const { model, messages, thinking, temperature, topP } = parsed.data;
   const config = MODELS[model];
   if (!config) {
     res.status(400).json({ error: "Unsupported model" });
+    return;
+  }
+
+  // Validate parameters against model capabilities
+  const caps = getCapabilities(model);
+  if (!caps) {
+    res.status(400).json({ error: "Model capabilities not found" });
     return;
   }
 
@@ -90,6 +101,22 @@ router.post("/chat", async (req, res): Promise<void> => {
     return;
   }
 
+  // Validate temperature: reject if model doesn't support it and user explicitly set it
+  if (temperature !== undefined && !caps.supportsTemperature) {
+    req.log.warn(
+      { model, temperature },
+      "Client sent temperature for a model that does not support it — ignoring"
+    );
+  }
+
+  // Validate topP: same check
+  if (topP !== undefined && !caps.supportsTopP) {
+    req.log.warn(
+      { model, topP },
+      "Client sent topP for a model that does not support it — ignoring"
+    );
+  }
+
   const effectiveModel =
     thinking && config.thinkingModel ? config.thinkingModel : model;
 
@@ -99,8 +126,21 @@ router.post("/chat", async (req, res): Promise<void> => {
     stream: false,
   };
 
+  // Apply thinking params
   if (thinking && config.thinkingParam) {
     Object.assign(payload, config.thinkingParam);
+  }
+
+  // Apply temperature only if model supports it
+  const resolvedTemp = resolveTemperature(model, temperature);
+  if (resolvedTemp !== undefined) {
+    payload.temperature = resolvedTemp;
+  }
+
+  // Apply topP only if model supports it
+  const resolvedTopP = resolveTopP(model, topP);
+  if (resolvedTopP !== undefined) {
+    payload.top_p = resolvedTopP;
   }
 
   try {

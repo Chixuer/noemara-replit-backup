@@ -50,7 +50,9 @@ export const ChatCompletionsBody = zod.object({
   "role": zod.enum(['user', 'assistant', 'system']),
   "content": zod.string()
 })),
-  "thinking": zod.boolean().default(chatCompletionsBodyThinkingDefault).describe('Enable deep thinking \/ reasoning mode. Kimi models always use deep thinking.')
+  "thinking": zod.boolean().default(chatCompletionsBodyThinkingDefault).describe('Enable deep thinking \/ reasoning mode. Kimi models always use deep thinking.'),
+  "temperature": zod.number().min(0).max(2).optional().describe('Sampling temperature. Only applied if the model supports it; ignored otherwise.'),
+  "topP": zod.number().min(0).max(1).optional().describe('Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.')
 })
 
 export const ChatCompletionsResponse = zod.object({

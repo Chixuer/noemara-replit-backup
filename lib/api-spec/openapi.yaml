@@ -151,6 +151,16 @@ components:
           type: boolean
           description: Enable deep thinking / reasoning mode. Kimi models always use deep thinking.
           default: false
+        temperature:
+          type: number
+          description: Sampling temperature. Only applied if the model supports it; ignored otherwise.
+          minimum: 0
+          maximum: 2
+        topP:
+          type: number
+          description: Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.
+          minimum: 0
+          maximum: 1
     ChatMessage:
       type: object
       required:
