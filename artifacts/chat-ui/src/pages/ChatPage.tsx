@@ -103,7 +103,6 @@ export default function ChatPage() {
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [thinking, setThinking] = useState(false);
   const chatMutation = useChatCompletions();
-  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
   const [toast, setToast] = useState(false);
@@ -214,11 +213,6 @@ export default function ChatPage() {
     }
   };
 
-  const handleDelete = (msgId: string) => {
-    const filtered = messages.filter((m) => m.id !== msgId);
-    updateActiveMessages(filtered);
-    setActiveMsgId(null);
-  };
 
   const handleCopy = (msgId: string, text: string) => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -1132,11 +1126,7 @@ export default function ChatPage() {
                     style={{
                       display: "flex",
                       justifyContent: "flex-end",
-                      position: "relative",
                     }}
-                    onClick={() =>
-                      setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                    }
                   >
                     <div
                       style={{
@@ -1148,68 +1138,10 @@ export default function ChatPage() {
                         fontWeight: 500,
                         maxWidth: "70%",
                         letterSpacing: 0.1,
-                        cursor: "pointer",
-                        userSelect: "none",
                       }}
                     >
                       {msg.text}
                     </div>
-                    {activeMsgId === msg.id && (
-                      <div
-                        className="anim-fade-in-scale"
-                        style={{
-                          position: "absolute",
-                          top: -34,
-                          right: 0,
-                          display: "flex",
-                          gap: 6,
-                        }}
-                      >
-                        <button
-                          style={{
-                            background: "hsl(0 0% 20%)",
-                            border: "none",
-                            borderRadius: 18,
-                            padding: "6px 12px",
-                            color: "#fff",
-                            fontSize: 13,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(msg.id);
-                          }}
-                        >
-                          <Trash2 size={13} strokeWidth={2} />
-                          删除
-                        </button>
-                        <button
-                          style={{
-                            background: "hsl(0 0% 20%)",
-                            border: "none",
-                            borderRadius: "50%",
-                            width: 28,
-                            height: 28,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            cursor: "pointer",
-                            color: "#fff",
-                            padding: 0,
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActiveMsgId(null);
-                          }}
-                        >
-                          <X size={14} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 );
               }
@@ -1239,58 +1171,9 @@ export default function ChatPage() {
                       lineHeight: 1.6,
                       letterSpacing: 0.1,
                     }}
-                    onClick={() =>
-                      setActiveMsgId(activeMsgId === msg.id ? null : msg.id)
-                    }
                   >
                     {msg.text}
                   </p>
-                  {activeMsgId === msg.id && (
-                    <div className="anim-fade-in-scale" style={{ display: "flex", gap: 6, marginTop: -6 }}>
-                      <button
-                        style={{
-                          background: "hsl(0 0% 20%)",
-                          border: "none",
-                          borderRadius: 18,
-                          padding: "6px 12px",
-                          color: "#fff",
-                          fontSize: 13,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          cursor: "pointer",
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(msg.id);
-                        }}
-                      >
-                        <Trash2 size={13} strokeWidth={2} />
-                        删除
-                      </button>
-                      <button
-                        style={{
-                          background: "hsl(0 0% 20%)",
-                          border: "none",
-                          borderRadius: "50%",
-                          width: 28,
-                          height: 28,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          cursor: "pointer",
-                          color: "#fff",
-                          padding: 0,
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setActiveMsgId(null);
-                        }}
-                      >
-                        <X size={14} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  )}
                   <div
                     style={{
                       display: "flex",
