@@ -37,6 +37,8 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
   const [volumes, setVolumes] = useState<number[]>(
     Array.from({ length: BAR_COUNT }, () => 0.06)
   );
+  const [isCompact, setIsCompact] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"recording" | "processing" | "error">("recording");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -166,6 +168,19 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
     };
   }, []);
 
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const el = wrapRef.current;
+    const update = () => {
+      const width = el.getBoundingClientRect().width;
+      setIsCompact(width < 340);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, "0");
     const s = (seconds % 60).toString().padStart(2, "0");
@@ -184,8 +199,22 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
     onCancel();
   }, [onCancel, status]);
 
+  const compact = isCompact;
+  const barCount = compact ? 22 : 28;
+  const visibleVolumes = volumes.slice(0, barCount);
+
   return (
-    <div className="anim-voice-enter" style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+    <div
+      ref={wrapRef}
+      className="anim-voice-enter"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: compact ? 7 : 9,
+        flex: 1,
+        minWidth: 0,
+      }}
+    >
       {/* Cancel */}
       <button
         className="btn-circle"
@@ -204,7 +233,7 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
           transition: "opacity 0.2s ease",
         }}
       >
-        <X size={21} strokeWidth={1.8} />
+        <X size={compact ? 18 : 21} strokeWidth={1.8} />
       </button>
 
       {/* Middle: waveform / status */}
@@ -215,8 +244,9 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
           alignItems: "center",
           justifyContent: "space-between",
           overflow: "hidden",
-          gap: 8,
+          gap: compact ? 6 : 8,
           height: 34,
+          minWidth: 0,
         }}
       >
         {status === "error" ? (
@@ -249,18 +279,19 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 2.5,
+              gap: compact ? 2 : 2.5,
               flex: 1,
               overflow: "hidden",
               maskImage: "linear-gradient(to right, transparent, black 6%, black 94%, transparent)",
               WebkitMaskImage: "linear-gradient(to right, transparent, black 6%, black 94%, transparent)",
             }}
           >
-            {volumes.map((v, i) => (
+            {visibleVolumes.map((v, i) => (
               <div
                 key={i}
                 className="wave-bar"
                 style={{
+                  width: compact ? 2 : 2.5,
                   height: `${5 + v * 26}px`,
                   opacity: 0.7 + v * 0.3,
                 }}
@@ -294,8 +325,8 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
           background: status !== "recording" ? "hsl(220 14% 88%)" : "hsl(220 14% 92%)",
           border: "none",
           borderRadius: "50%",
-          width: 36,
-          height: 36,
+          width: compact ? 32 : 34,
+          height: compact ? 32 : 34,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -306,7 +337,7 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
           opacity: status !== "recording" ? 0.45 : 1,
         }}
       >
-        <Square size={15} strokeWidth={2.5} style={{ color: "hsl(220 15% 22%)" }} />
+        <Square size={compact ? 13 : 14} strokeWidth={2.5} style={{ color: "hsl(220 15% 22%)" }} />
       </button>
 
       {/* Send directly */}
@@ -318,19 +349,20 @@ export default function VoiceRecorder({ onTranscribe, onSend, onCancel }: VoiceR
           background: status !== "recording" ? "hsl(142 55% 44%)" : "hsl(142 72% 36%)",
           border: "none",
           borderRadius: "50%",
-          width: 38,
-          height: 38,
+          width: compact ? 34 : 36,
+          height: compact ? 34 : 36,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: status !== "recording" ? "default" : "pointer",
           flexShrink: 0,
           padding: 0,
+          marginRight: 2,
           transition: "background 0.2s ease, opacity 0.2s ease",
           opacity: status !== "recording" ? 0.5 : 1,
         }}
       >
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+        <svg width={compact ? 17 : 18} height={compact ? 17 : 18} viewBox="0 0 24 24" fill="none">
           <path
             d="M12 19V5M12 5L5 12M12 5L19 12"
             stroke="white"

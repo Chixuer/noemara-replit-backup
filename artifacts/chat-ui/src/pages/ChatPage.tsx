@@ -72,17 +72,7 @@ function makeTitleFromMessage(msg: string): string {
 }
 
 export default function ChatPage() {
-  const initialConv: Conversation = {
-    id: generateId(),
-    title: "哈喽问候",
-    messages: [
-      { id: generateId(), role: "user", text: "哈喽" },
-      { id: generateId(), role: "ai", text: AI_RESPONSE },
-    ],
-    pinned: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
+  const initialConv = createNewConversation();
 
   const [conversations, setConversations] = useState<Conversation[]>([initialConv]);
   const [activeId, setActiveId] = useState<string>(initialConv.id);
@@ -823,20 +813,22 @@ export default function ChatPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                color: "hsl(220 15% 20%)",
-                display: "flex",
-                alignItems: "center",
-              }}
-              onClick={handleNewChat}
-            >
-              <SquarePen size={21} strokeWidth={1.8} />
-            </button>
+            {(activeConv?.messages.length ?? 0) > 0 && (
+              <button
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  color: "hsl(220 15% 20%)",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                onClick={handleNewChat}
+              >
+                <SquarePen size={21} strokeWidth={1.8} />
+              </button>
+            )}
             <button
               style={{
                 background: "none",
