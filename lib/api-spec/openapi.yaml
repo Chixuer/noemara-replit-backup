@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: asr
     description: Speech recognition operations
+  - name: chat
+    description: Chat completion operations
 paths:
   /healthz:
     get:
