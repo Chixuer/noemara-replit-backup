@@ -23,3 +23,7 @@ timeoutMs = 20000
 [userenv.shared]
 DASHSCOPE_ASR_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 DASHSCOPE_ASR_MODEL = "qwen3-asr-flash"
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+KIMI_API_URL = "https://api.moonshot.cn/v1/chat/completions"
+QWEN_API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+DEEPSEEK_THINKING_MODEL = "deepseek-reasoner"
