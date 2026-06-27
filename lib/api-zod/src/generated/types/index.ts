@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './addMessagesInput';
+export * from './addMessagesResult';
 export * from './audioTranscriptionInput';
 export * from './audioTranscriptionResult';
 export * from './audioTranscriptionResultRaw';
@@ -14,5 +16,13 @@ export * from './chatCompletionInputModel';
 export * from './chatCompletionResult';
 export * from './chatMessage';
 export * from './chatMessageRole';
+export * from './conversationList';
+export * from './conversationSummary';
+export * from './conversationWithMessages';
+export * from './createConversationInput';
+export * from './deleteResult';
 export * from './errorResponse';
 export * from './healthStatus';
+export * from './newMessage';
+export * from './storedMessage';
+export * from './updateConversationInput';

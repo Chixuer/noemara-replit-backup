@@ -43,6 +43,13 @@ export const TranscribeAudioResponse = zod.object({
  * @summary Chat completions
  */
 export const chatCompletionsBodyThinkingDefault = false;
+export const chatCompletionsBodyTemperatureMin = 0;
+export const chatCompletionsBodyTemperatureMax = 2;
+
+export const chatCompletionsBodyTopPMin = 0;
+export const chatCompletionsBodyTopPMax = 1;
+
+
 
 export const ChatCompletionsBody = zod.object({
   "model": zod.enum(['deepseek-v4-flash', 'qwen3.7-plus', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed']).describe('Selected model ID (e.g. deepseek-v4-flash, qwen3.7-plus, kimi-k2.7-code, kimi-k2.7-code-highspeed)'),
@@ -51,14 +58,148 @@ export const ChatCompletionsBody = zod.object({
   "content": zod.string()
 })),
   "thinking": zod.boolean().default(chatCompletionsBodyThinkingDefault).describe('Enable deep thinking \/ reasoning mode. Kimi models always use deep thinking.'),
-  "temperature": zod.number().min(0).max(2).optional().describe('Sampling temperature. Only applied if the model supports it; ignored otherwise.'),
-  "topP": zod.number().min(0).max(1).optional().describe('Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.')
+  "temperature": zod.number().min(chatCompletionsBodyTemperatureMin).max(chatCompletionsBodyTemperatureMax).optional().describe('Sampling temperature. Only applied if the model supports it; ignored otherwise.'),
+  "topP": zod.number().min(chatCompletionsBodyTopPMin).max(chatCompletionsBodyTopPMax).optional().describe('Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.')
 })
 
 export const ChatCompletionsResponse = zod.object({
   "text": zod.string(),
   "model": zod.string().optional(),
   "thinking": zod.boolean().optional()
+})
+
+
+/**
+ * @summary List all conversations
+ */
+export const ListConversationsResponse = zod.object({
+  "conversations": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "modelId": zod.string(),
+  "pinned": zod.boolean(),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number()
+}))
+})
+
+
+/**
+ * @summary Create a new conversation
+ */
+export const CreateConversationBody = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "modelId": zod.string(),
+  "pinned": zod.boolean(),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number()
+})
+
+export const CreateConversationResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "modelId": zod.string(),
+  "pinned": zod.boolean(),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "messages": zod.array(zod.object({
+  "id": zod.string(),
+  "conversationId": zod.string(),
+  "role": zod.string(),
+  "text": zod.string(),
+  "thinking": zod.boolean(),
+  "multiAnswer": zod.unknown().optional().describe('Multi-answer versions JSON'),
+  "multiAnswerActiveIdx": zod.number().optional(),
+  "createdAt": zod.number()
+}))
+})
+
+
+/**
+ * @summary Get conversation with all messages
+ */
+export const GetConversationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetConversationResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "modelId": zod.string(),
+  "pinned": zod.boolean(),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number(),
+  "messages": zod.array(zod.object({
+  "id": zod.string(),
+  "conversationId": zod.string(),
+  "role": zod.string(),
+  "text": zod.string(),
+  "thinking": zod.boolean(),
+  "multiAnswer": zod.unknown().optional().describe('Multi-answer versions JSON'),
+  "multiAnswerActiveIdx": zod.number().optional(),
+  "createdAt": zod.number()
+}))
+})
+
+
+/**
+ * @summary Update conversation title or pinned state
+ */
+export const UpdateConversationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateConversationBody = zod.object({
+  "title": zod.string().optional(),
+  "pinned": zod.boolean().optional(),
+  "modelId": zod.string().optional(),
+  "updatedAt": zod.number().optional()
+})
+
+export const UpdateConversationResponse = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "modelId": zod.string(),
+  "pinned": zod.boolean(),
+  "createdAt": zod.number(),
+  "updatedAt": zod.number()
+})
+
+
+/**
+ * @summary Delete a conversation and all its messages
+ */
+export const DeleteConversationParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteConversationResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
+ * @summary Append messages to a conversation
+ */
+export const AddMessagesParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AddMessagesBody = zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.string(),
+  "role": zod.string(),
+  "text": zod.string(),
+  "thinking": zod.boolean().optional(),
+  "multiAnswer": zod.unknown().optional().describe('Multi-answer versions JSON'),
+  "multiAnswerActiveIdx": zod.number().optional(),
+  "createdAt": zod.number()
+}))
+})
+
+export const AddMessagesResponse = zod.object({
+  "count": zod.number()
 })
 
 

@@ -14,4 +14,16 @@ export interface ChatCompletionInput {
   messages: ChatMessage[];
   /** Enable deep thinking / reasoning mode. Kimi models always use deep thinking. */
   thinking?: boolean;
+  /**
+     * Sampling temperature. Only applied if the model supports it; ignored otherwise.
+     * @minimum 0
+     * @maximum 2
+     */
+  temperature?: number;
+  /**
+     * Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.
+     * @minimum 0
+     * @maximum 1
+     */
+  topP?: number;
 }

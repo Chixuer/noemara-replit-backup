@@ -14,6 +14,8 @@ tags:
     description: Speech recognition operations
   - name: chat
     description: Chat completion operations
+  - name: conversations
+    description: Conversation history operations
 paths:
   /healthz:
     get:
@@ -91,6 +93,147 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Chat completion failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List all conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationList"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationInput"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationWithMessages"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get conversation with all messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationWithMessages"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateConversation
+      tags: [conversations]
+      summary: Update conversation title or pinned state
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConversationInput"
+      responses:
+        "200":
+          description: Updated conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSummary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteConversation
+      tags: [conversations]
+      summary: Delete a conversation and all its messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResult"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /conversations/{id}/messages:
+    post:
+      operationId: addMessages
+      tags: [conversations]
+      summary: Append messages to a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMessagesInput"
+      responses:
+        "201":
+          description: Messages added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddMessagesResult"
+        "404":
+          description: Conversation not found
           content:
             application/json:
               schema:
@@ -192,4 +335,165 @@ components:
           type: string
         details:
           type: string
-
+    ConversationSummary:
+      type: object
+      required:
+        - id
+        - title
+        - modelId
+        - pinned
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        modelId:
+          type: string
+        pinned:
+          type: boolean
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+    ConversationList:
+      type: object
+      required:
+        - conversations
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSummary"
+    StoredMessage:
+      type: object
+      required:
+        - id
+        - conversationId
+        - role
+        - text
+        - thinking
+        - createdAt
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        role:
+          type: string
+        text:
+          type: string
+        thinking:
+          type: boolean
+        multiAnswer:
+          description: Multi-answer versions JSON
+        multiAnswerActiveIdx:
+          type: number
+        createdAt:
+          type: number
+    ConversationWithMessages:
+      type: object
+      required:
+        - id
+        - title
+        - modelId
+        - pinned
+        - createdAt
+        - updatedAt
+        - messages
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        modelId:
+          type: string
+        pinned:
+          type: boolean
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoredMessage"
+    CreateConversationInput:
+      type: object
+      required:
+        - id
+        - title
+        - modelId
+        - pinned
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        modelId:
+          type: string
+        pinned:
+          type: boolean
+        createdAt:
+          type: number
+        updatedAt:
+          type: number
+    UpdateConversationInput:
+      type: object
+      properties:
+        title:
+          type: string
+        pinned:
+          type: boolean
+        modelId:
+          type: string
+        updatedAt:
+          type: number
+    DeleteResult:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+    AddMessagesInput:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewMessage"
+    NewMessage:
+      type: object
+      required:
+        - id
+        - role
+        - text
+        - createdAt
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+        text:
+          type: string
+        thinking:
+          type: boolean
+        multiAnswer:
+          description: Multi-answer versions JSON
+        multiAnswerActiveIdx:
+          type: number
+        createdAt:
+          type: number
+    AddMessagesResult:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: number

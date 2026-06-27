@@ -25,7 +25,14 @@ import {
 } from "lucide-react";
 import VoiceRecorder from "../components/VoiceRecorder";
 import AdvancedPanel from "../components/AdvancedPanel";
-import { useChatCompletions } from "@workspace/api-client-react";
+import {
+  useChatCompletions,
+  useListConversations,
+  useCreateConversation,
+  useUpdateConversation,
+  useDeleteConversation,
+  useAddMessages,
+} from "@workspace/api-client-react";
 import type { ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
 import {
   loadSettings,
@@ -123,6 +130,7 @@ export default function ChatPage() {
 
   const [conversations, setConversations] = useState<Conversation[]>([initialConv]);
   const [activeId, setActiveId] = useState<string>(initialConv.id);
+  const [dbLoaded, setDbLoaded] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,6 +140,12 @@ export default function ChatPage() {
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [thinking, setThinking] = useState(false);
   const chatMutation = useChatCompletions();
+  const createConvMutation = useCreateConversation();
+  const updateConvMutation = useUpdateConversation();
+  const deleteConvMutation = useDeleteConversation();
+  const addMessagesMutation = useAddMessages();
+
+  const { data: convListData } = useListConversations();
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
   const [toast, setToast] = useState(false);
@@ -187,6 +201,25 @@ export default function ChatPage() {
     }
   }, [searchOpen]);
 
+  // Load conversations from DB on mount
+  useEffect(() => {
+    if (!convListData || dbLoaded) return;
+    const dbConvs = convListData.conversations;
+    if (dbConvs.length > 0) {
+      const mapped: Conversation[] = dbConvs.map((c) => ({
+        id: c.id,
+        title: c.title,
+        messages: [],
+        pinned: c.pinned,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      }));
+      setConversations(mapped);
+      setActiveId(mapped[0].id);
+    }
+    setDbLoaded(true);
+  }, [convListData, dbLoaded]);
+
   // Reload saved settings when model changes
   useEffect(() => {
     setAdvancedSettings(loadSettings(modelId));
@@ -211,16 +244,20 @@ export default function ChatPage() {
     const text = inputText.trim();
     if (!text) return;
 
+    const now = Date.now();
     const userMsg: Message = { id: generateId(), role: "user", text };
     const newMessages = [...messages, userMsg];
     updateActiveMessages(newMessages);
 
+    const isNewTitle = activeConv?.title === "新对话";
+    const newTitle = isNewTitle ? makeTitleFromMessage(text) : undefined;
+
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === activeId && c.title === "新对话"
-          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+        c.id === activeId && isNewTitle
+          ? { ...c, title: newTitle!, updatedAt: now }
           : c.id === activeId
-            ? { ...c, updatedAt: Date.now() }
+            ? { ...c, updatedAt: now }
             : c
       )
     );
@@ -228,8 +265,24 @@ export default function ChatPage() {
     setInputText("");
     setReplying(true);
 
+    // Ensure conversation exists in DB (create if missing)
+    const convExists = convListData?.conversations.some((c) => c.id === activeId);
+    if (!convExists) {
+      await createConvMutation.mutateAsync({
+        data: {
+          id: activeId,
+          title: newTitle ?? activeConv?.title ?? "新对话",
+          modelId,
+          pinned: activeConv?.pinned ?? false,
+          createdAt: activeConv?.createdAt ?? now,
+          updatedAt: now,
+        },
+      }).catch(() => {});
+    } else if (newTitle) {
+      updateConvMutation.mutate({ id: activeId, data: { title: newTitle, updatedAt: now } });
+    }
+
     try {
-      // Apply context limit and system preset
       const rawMessages: ChatMessage[] = newMessages.map((m) => ({
         role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
         content: m.text,
@@ -256,6 +309,15 @@ export default function ChatPage() {
         thinking: result.thinking,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: aiMsg.thinking ?? false, createdAt: Date.now() },
+          ],
+        },
+      });
     } catch (err) {
       const errorText = err instanceof Error ? err.message : "请求失败";
       const aiMsg: Message = {
@@ -264,6 +326,15 @@ export default function ChatPage() {
         text: `出错了：${errorText}`,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: false, createdAt: Date.now() },
+          ],
+        },
+      });
     } finally {
       setReplying(false);
     }
@@ -287,7 +358,33 @@ export default function ChatPage() {
     setSidebarOpen(false);
   };
 
-  const handleSelectConv = (id: string) => {
+  const handleSelectConv = async (id: string) => {
+    // Load messages for this conversation if not yet loaded
+    const conv = conversations.find((c) => c.id === id);
+    if (conv && conv.messages.length === 0 && convListData?.conversations.some((c) => c.id === id)) {
+      try {
+        const BASE = (import.meta.env.BASE_URL ?? "").replace(/\/$/, "");
+        const resp = await fetch(`${BASE}/api/conversations/${id}`);
+        if (resp.ok) {
+          const data = await resp.json() as {
+            messages: Array<{ id: string; role: string; text: string; thinking: boolean; multiAnswer?: unknown; multiAnswerActiveIdx?: number; createdAt: number }>;
+          };
+          const loaded: Message[] = data.messages.map((m) => ({
+            id: m.id,
+            role: m.role === "user" ? "user" : "ai",
+            text: m.text,
+            thinking: m.thinking,
+            multiAnswer: m.multiAnswer as Message["multiAnswer"],
+            multiAnswerActiveIdx: m.multiAnswerActiveIdx,
+          }));
+          setConversations((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, messages: loaded } : c))
+          );
+        }
+      } catch {
+        // silently ignore
+      }
+    }
     setActiveId(id);
     setSidebarOpen(false);
     setSearchOpen(false);
@@ -295,9 +392,14 @@ export default function ChatPage() {
   };
 
   const handlePinConv = (id: string) => {
+    const conv = conversations.find((c) => c.id === id);
+    const newPinned = !(conv?.pinned ?? false);
     setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c))
+      prev.map((c) => (c.id === id ? { ...c, pinned: newPinned } : c))
     );
+    if (convListData?.conversations.some((c) => c.id === id)) {
+      updateConvMutation.mutate({ id, data: { pinned: newPinned, updatedAt: Date.now() } });
+    }
   };
 
   const handleDeleteConv = (id: string) => {
@@ -311,6 +413,9 @@ export default function ChatPage() {
         setConversations([newConv]);
         setActiveId(newConv.id);
       }
+    }
+    if (convListData?.conversations.some((c) => c.id === id)) {
+      deleteConvMutation.mutate({ id });
     }
   };
 
@@ -352,21 +457,41 @@ export default function ChatPage() {
     stopVoice();
     if (!text.trim()) return;
 
+    const now = Date.now();
     const userMsg: Message = { id: generateId(), role: "user", text };
     const newMessages = [...messages, userMsg];
     updateActiveMessages(newMessages);
 
+    const isNewTitle = activeConv?.title === "新对话";
+    const newTitle = isNewTitle ? makeTitleFromMessage(text) : undefined;
+
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === activeId && c.title === "新对话"
-          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+        c.id === activeId && isNewTitle
+          ? { ...c, title: newTitle!, updatedAt: now }
           : c.id === activeId
-            ? { ...c, updatedAt: Date.now() }
+            ? { ...c, updatedAt: now }
             : c,
       ),
     );
 
     setReplying(true);
+
+    const convExists = convListData?.conversations.some((c) => c.id === activeId);
+    if (!convExists) {
+      await createConvMutation.mutateAsync({
+        data: {
+          id: activeId,
+          title: newTitle ?? activeConv?.title ?? "新对话",
+          modelId,
+          pinned: activeConv?.pinned ?? false,
+          createdAt: activeConv?.createdAt ?? now,
+          updatedAt: now,
+        },
+      }).catch(() => {});
+    } else if (newTitle) {
+      updateConvMutation.mutate({ id: activeId, data: { title: newTitle, updatedAt: now } });
+    }
 
     try {
       const rawMessages: ChatMessage[] = newMessages.map((m) => ({
@@ -395,6 +520,15 @@ export default function ChatPage() {
         thinking: result.thinking,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: aiMsg.thinking ?? false, createdAt: Date.now() },
+          ],
+        },
+      });
     } catch (err) {
       const errorText = err instanceof Error ? err.message : "请求失败";
       const aiMsg: Message = {
@@ -403,6 +537,15 @@ export default function ChatPage() {
         text: `出错了：${errorText}`,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: false, createdAt: Date.now() },
+          ],
+        },
+      });
     } finally {
       setReplying(false);
     }
@@ -420,16 +563,20 @@ export default function ChatPage() {
     const selectedVers = MULTI_ANSWER_VERSIONS.filter((v) => versionIds.includes(v.id));
     if (selectedVers.length === 0) return;
 
+    const now = Date.now();
     const userMsg: Message = { id: generateId(), role: "user", text };
     const newMessages = [...messages, userMsg];
     updateActiveMessages(newMessages);
 
+    const isNewTitle = activeConv?.title === "新对话";
+    const newTitle = isNewTitle ? makeTitleFromMessage(text) : undefined;
+
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === activeId && c.title === "新对话"
-          ? { ...c, title: makeTitleFromMessage(text), updatedAt: Date.now() }
+        c.id === activeId && isNewTitle
+          ? { ...c, title: newTitle!, updatedAt: now }
           : c.id === activeId
-            ? { ...c, updatedAt: Date.now() }
+            ? { ...c, updatedAt: now }
             : c
       )
     );
@@ -438,6 +585,22 @@ export default function ChatPage() {
     setMultiAnswerOpen(false);
     setMultiAnswerPending(true);
     setReplying(true);
+
+    const convExists = convListData?.conversations.some((c) => c.id === activeId);
+    if (!convExists) {
+      await createConvMutation.mutateAsync({
+        data: {
+          id: activeId,
+          title: newTitle ?? activeConv?.title ?? "新对话",
+          modelId,
+          pinned: activeConv?.pinned ?? false,
+          createdAt: activeConv?.createdAt ?? now,
+          updatedAt: now,
+        },
+      }).catch(() => {});
+    } else if (newTitle) {
+      updateConvMutation.mutate({ id: activeId, data: { title: newTitle, updatedAt: now } });
+    }
 
     const rawMessages: ChatMessage[] = newMessages.map((m) => ({
       role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
@@ -487,6 +650,15 @@ export default function ChatPage() {
         multiAnswerActiveIdx: 0,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: true, multiAnswer: versions, multiAnswerActiveIdx: 0, createdAt: Date.now() },
+          ],
+        },
+      });
     } catch (err) {
       const errorText = err instanceof Error ? err.message : "请求失败";
       const aiMsg: Message = {
@@ -495,6 +667,15 @@ export default function ChatPage() {
         text: `同题多答失败：${errorText}`,
       };
       updateActiveMessages([...newMessages, aiMsg]);
+      addMessagesMutation.mutate({
+        id: activeId,
+        data: {
+          messages: [
+            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
+            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: false, createdAt: Date.now() },
+          ],
+        },
+      });
     } finally {
       setReplying(false);
       setMultiAnswerPending(false);

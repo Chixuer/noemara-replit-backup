@@ -63,9 +63,17 @@ export interface ChatCompletionInput {
   messages: ChatMessage[];
   /** Enable deep thinking / reasoning mode. Kimi models always use deep thinking. */
   thinking?: boolean;
-  /** Sampling temperature (0–2). Only applied when the model supports it. */
+  /**
+     * Sampling temperature. Only applied if the model supports it; ignored otherwise.
+     * @minimum 0
+     * @maximum 2
+     */
   temperature?: number;
-  /** Top-p nucleus sampling (0–1). Only applied when the model supports it. */
+  /**
+     * Top-p nucleus sampling. Only applied if the model supports it; ignored otherwise.
+     * @minimum 0
+     * @maximum 1
+     */
   topP?: number;
 }
 
@@ -78,5 +86,79 @@ export interface ChatCompletionResult {
 export interface ErrorResponse {
   error: string;
   details?: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  modelId: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConversationList {
+  conversations: ConversationSummary[];
+}
+
+export interface StoredMessage {
+  id: string;
+  conversationId: string;
+  role: string;
+  text: string;
+  thinking: boolean;
+  /** Multi-answer versions JSON */
+  multiAnswer?: unknown;
+  multiAnswerActiveIdx?: number;
+  createdAt: number;
+}
+
+export interface ConversationWithMessages {
+  id: string;
+  title: string;
+  modelId: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+  messages: StoredMessage[];
+}
+
+export interface CreateConversationInput {
+  id: string;
+  title: string;
+  modelId: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UpdateConversationInput {
+  title?: string;
+  pinned?: boolean;
+  modelId?: string;
+  updatedAt?: number;
+}
+
+export interface DeleteResult {
+  success: boolean;
+}
+
+export interface NewMessage {
+  id: string;
+  role: string;
+  text: string;
+  thinking?: boolean;
+  /** Multi-answer versions JSON */
+  multiAnswer?: unknown;
+  multiAnswerActiveIdx?: number;
+  createdAt: number;
+}
+
+export interface AddMessagesInput {
+  messages: NewMessage[];
+}
+
+export interface AddMessagesResult {
+  count: number;
 }
 
