@@ -70,6 +70,29 @@ export const ChatCompletionsResponse = zod.object({
 
 
 /**
+ * @summary Search conversations by title or message content
+ */
+export const SearchConversationsQueryParams = zod.object({
+  "q": zod.coerce.string().describe('Search query matched against conversation titles and message text')
+})
+
+export const SearchConversationsResponse = zod.object({
+  "results": zod.array(zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "pinned": zod.boolean(),
+  "updatedAt": zod.number(),
+  "matchingMessages": zod.array(zod.object({
+  "id": zod.string(),
+  "role": zod.string(),
+  "text": zod.string(),
+  "createdAt": zod.number()
+}))
+}))
+})
+
+
+/**
  * @summary List all conversations
  */
 export const ListConversationsResponse = zod.object({

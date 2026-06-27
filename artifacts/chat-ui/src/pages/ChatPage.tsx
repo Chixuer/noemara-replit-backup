@@ -32,6 +32,8 @@ import {
   useUpdateConversation,
   useDeleteConversation,
   useAddMessages,
+  useSearchConversations,
+  getSearchConversationsQueryKey,
 } from "@workspace/api-client-react";
 import type { ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
 import {
@@ -125,6 +127,21 @@ function makeTitleFromMessage(msg: string): string {
   return trimmed.slice(0, 12) + "...";
 }
 
+function highlightMatch(text: string, query: string): React.ReactNode {
+  if (!query.trim()) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background: "hsl(45 100% 75%)", color: "inherit", padding: 0, borderRadius: 2 }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 export default function ChatPage() {
   const initialConv = createNewConversation();
 
@@ -134,6 +151,7 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [inputText, setInputText] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
@@ -175,9 +193,10 @@ export default function ChatPage() {
   const pinnedConvs = conversations.filter((c) => c.pinned);
   const recentConvs = conversations.filter((c) => !c.pinned);
 
-  const filteredConvs = searchQuery.trim()
-    ? conversations.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    : [];
+  const { data: searchData, isFetching: searchFetching } = useSearchConversations(
+    { q: debouncedQuery },
+    { query: { enabled: debouncedQuery.trim().length > 0, queryKey: getSearchConversationsQueryKey({ q: debouncedQuery }) } }
+  );
 
   const scrollToBottom = useCallback(() => {
     if (chatRef.current) {
@@ -200,6 +219,12 @@ export default function ChatPage() {
       searchInputRef.current.focus();
     }
   }, [searchOpen]);
+
+  // Debounce search query by 300ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Load conversations from DB on mount
   useEffect(() => {
@@ -981,34 +1006,67 @@ export default function ChatPage() {
         {/* All conversations list */}
         <div className="app-search-overlay-list" style={{ overflowY: "auto", flex: 1, padding: "8px 0" }}>
           {searchQuery.trim() ? (
-            filteredConvs.length === 0 ? (
+            searchFetching ? (
               <div style={{ color: "hsl(220 9% 55%)", fontSize: 14, textAlign: "center", padding: 40 }}>
-                未找到匹配的对话
+                搜索中…
+              </div>
+            ) : !searchData || searchData.results.length === 0 ? (
+              <div style={{ color: "hsl(220 9% 55%)", fontSize: 14, textAlign: "center", padding: 40 }}>
+                未找到匹配的对话或消息
               </div>
             ) : (
-              filteredConvs.map((c) => (
+              searchData.results.map((r) => (
                 <button
-                  key={c.id}
+                  key={r.id}
                   style={{
                     display: "flex",
-                    alignItems: "center",
-                    gap: 14,
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 4,
                     width: "100%",
-                    padding: "14px 20px",
+                    padding: "12px 20px",
                     background: "none",
                     border: "none",
+                    borderBottom: "1px solid hsl(0 0% 95%)",
                     cursor: "pointer",
-                    fontSize: 16,
-                    color: "hsl(220 15% 12%)",
-                    fontWeight: 500,
                     textAlign: "left",
                   }}
-                  onClick={() => handleSelectConv(c.id)}
+                  onClick={() => handleSelectConv(r.id)}
                 >
-                  <Circle size={14} strokeWidth={1.6} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.title}
-                  </span>
+                  {/* Conversation title */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                    <Circle size={13} strokeWidth={1.6} style={{ color: "hsl(220 9% 55%)", flexShrink: 0 }} />
+                    <span style={{
+                      flex: 1,
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: "hsl(220 15% 12%)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}>
+                      {highlightMatch(r.title, debouncedQuery)}
+                    </span>
+                  </div>
+                  {/* Matching message snippets */}
+                  {r.matchingMessages.slice(0, 2).map((m) => (
+                    <div key={m.id} style={{
+                      paddingLeft: 23,
+                      fontSize: 13,
+                      color: "hsl(220 9% 50%)",
+                      lineHeight: 1.45,
+                      width: "100%",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}>
+                      <span style={{ fontWeight: 500, color: m.role === "user" ? "hsl(142 55% 38%)" : "hsl(220 9% 45%)", marginRight: 4 }}>
+                        {m.role === "user" ? "你" : "AI"}:
+                      </span>
+                      {highlightMatch(m.text, debouncedQuery)}
+                    </div>
+                  ))}
                 </button>
               ))
             )

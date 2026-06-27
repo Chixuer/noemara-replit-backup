@@ -97,6 +97,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /conversations/search:
+    get:
+      operationId: searchConversations
+      tags: [conversations]
+      summary: Search conversations by title or message content
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query matched against conversation titles and message text
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationSearchResults"
   /conversations:
     get:
       operationId: listConversations
@@ -497,3 +516,47 @@ components:
       properties:
         count:
           type: number
+    ConversationSearchResult:
+      type: object
+      required:
+        - id
+        - title
+        - pinned
+        - updatedAt
+        - matchingMessages
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        pinned:
+          type: boolean
+        updatedAt:
+          type: number
+        matchingMessages:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - role
+              - text
+              - createdAt
+            properties:
+              id:
+                type: string
+              role:
+                type: string
+              text:
+                type: string
+              createdAt:
+                type: number
+    ConversationSearchResults:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConversationSearchResult"

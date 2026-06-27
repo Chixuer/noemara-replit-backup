@@ -1,8 +1,85 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, ilike, or } from "drizzle-orm";
 import { db, conversationsTable, messagesTable } from "@workspace/db";
 
 const router: IRouter = Router();
+
+router.get("/conversations/search", async (req, res): Promise<void> => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!q) {
+    res.json({ results: [] });
+    return;
+  }
+  try {
+    const pattern = `%${q}%`;
+
+    // Find conversations matching by title
+    const titleMatches = await db
+      .select()
+      .from(conversationsTable)
+      .where(ilike(conversationsTable.title, pattern));
+
+    // Find messages matching by text, pull their conversation IDs
+    const msgMatches = await db
+      .select()
+      .from(messagesTable)
+      .where(ilike(messagesTable.text, pattern))
+      .orderBy(messagesTable.createdAt);
+
+    // Collect all unique conversation IDs (title matches + message matches)
+    const convIdSet = new Set<string>([
+      ...titleMatches.map((c) => c.id),
+      ...msgMatches.map((m) => m.conversationId),
+    ]);
+
+    if (convIdSet.size === 0) {
+      res.json({ results: [] });
+      return;
+    }
+
+    // Fetch full conversation records for any not already in titleMatches
+    const titleMatchIds = new Set(titleMatches.map((c) => c.id));
+    const extraIds = [...convIdSet].filter((id) => !titleMatchIds.has(id));
+
+    let allConvs = [...titleMatches];
+    if (extraIds.length > 0) {
+      const extras = await db
+        .select()
+        .from(conversationsTable)
+        .where(or(...extraIds.map((id) => eq(conversationsTable.id, id))));
+      allConvs = [...allConvs, ...extras];
+    }
+
+    // Sort by updatedAt desc
+    allConvs.sort((a, b) => b.updatedAt - a.updatedAt);
+
+    // Group matching messages by conversation
+    const msgsByConv = new Map<string, typeof msgMatches>();
+    for (const m of msgMatches) {
+      const arr = msgsByConv.get(m.conversationId) ?? [];
+      arr.push(m);
+      msgsByConv.set(m.conversationId, arr);
+    }
+
+    const results = allConvs.map((c) => ({
+      id: c.id,
+      title: c.title,
+      pinned: c.pinned,
+      updatedAt: c.updatedAt,
+      matchingMessages: (msgsByConv.get(c.id) ?? []).map((m) => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        createdAt: m.createdAt,
+      })),
+    }));
+
+    res.json({ results });
+  } catch (err) {
+    req.log.error({ err }, "Search failed");
+    res.status(500).json({ error: "Search failed" });
+  }
+});
 
 router.get("/conversations", async (req, res): Promise<void> => {
   try {

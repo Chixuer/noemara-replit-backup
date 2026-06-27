@@ -162,3 +162,29 @@ export interface AddMessagesResult {
   count: number;
 }
 
+export type ConversationSearchResultMatchingMessagesItem = {
+  id: string;
+  role: string;
+  text: string;
+  createdAt: number;
+};
+
+export interface ConversationSearchResult {
+  id: string;
+  title: string;
+  pinned: boolean;
+  updatedAt: number;
+  matchingMessages: ConversationSearchResultMatchingMessagesItem[];
+}
+
+export interface ConversationSearchResults {
+  results: ConversationSearchResult[];
+}
+
+export type SearchConversationsParams = {
+/**
+ * Search query matched against conversation titles and message text
+ */
+q: string;
+};
+

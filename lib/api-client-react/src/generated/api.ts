@@ -27,12 +27,14 @@ import type {
   ChatCompletionInput,
   ChatCompletionResult,
   ConversationList,
+  ConversationSearchResults,
   ConversationSummary,
   ConversationWithMessages,
   CreateConversationInput,
   DeleteResult,
   ErrorResponse,
   HealthStatus,
+  SearchConversationsParams,
   UpdateConversationInput
 } from './api.schemas';
 
@@ -285,6 +287,90 @@ export const useChatCompletions = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getChatCompletionsMutationOptions(options));
     }
+
+export const getSearchConversationsUrl = (params: SearchConversationsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/conversations/search?${stringifiedParams}` : `/api/conversations/search`
+}
+
+/**
+ * @summary Search conversations by title or message content
+ */
+export const searchConversations = async (params: SearchConversationsParams, options?: RequestInit): Promise<ConversationSearchResults> => {
+
+  return customFetch<ConversationSearchResults>(getSearchConversationsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchConversationsQueryKey = (params?: SearchConversationsParams,) => {
+    return [
+    `/api/conversations/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchConversationsQueryOptions = <TData = Awaited<ReturnType<typeof searchConversations>>, TError = ErrorType<unknown>>(params: SearchConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchConversationsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchConversations>>> = ({ signal }) => searchConversations(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchConversations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type SearchConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof searchConversations>>>
+export type SearchConversationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Search conversations by title or message content
+ */
+
+export function useSearchConversations<TData = Awaited<ReturnType<typeof searchConversations>>, TError = ErrorType<unknown>>(
+ params: SearchConversationsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof searchConversations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getSearchConversationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListConversationsUrl = () => {
 
