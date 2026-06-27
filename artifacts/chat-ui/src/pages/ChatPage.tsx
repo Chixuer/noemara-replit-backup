@@ -28,7 +28,6 @@ import VoiceRecorder from "../components/VoiceRecorder";
 import AdvancedPanel from "../components/AdvancedPanel";
 import MessageSelector from "../components/MessageSelector";
 import {
-  useChatCompletions,
   useListConversations,
   useCreateConversation,
   useUpdateConversation,
@@ -37,7 +36,7 @@ import {
   useSearchConversations,
   getSearchConversationsQueryKey,
 } from "@workspace/api-client-react";
-import type { ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
+import type { ChatMessage } from "@workspace/api-client-react";
 import {
   loadSettings,
   saveSettings,
@@ -46,6 +45,7 @@ import {
   applyContextLimit,
   type AdvancedSettings,
 } from "../lib/advanced-settings";
+import { streamChat } from "../lib/stream-chat";
 
 interface MultiAnswerVersion {
   label: string;
@@ -64,6 +64,8 @@ interface Message {
   multiAnswerActiveIdx?: number;
   /** True when the model stopped because it hit the max token limit */
   truncated?: boolean;
+  /** True while the AI response is still streaming in word-by-word */
+  streaming?: boolean;
 }
 
 interface Conversation {
@@ -161,7 +163,6 @@ export default function ChatPage() {
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
   const [thinking, setThinking] = useState(false);
-  const chatMutation = useChatCompletions();
   const createConvMutation = useCreateConversation();
   const updateConvMutation = useUpdateConversation();
   const deleteConvMutation = useDeleteConversation();
@@ -270,9 +271,111 @@ export default function ChatPage() {
     );
   };
 
+  /**
+   * Shared streaming helper used by handleSend and handleVoiceSend.
+   * Inserts an AI placeholder message immediately, streams chunks into it
+   * word-by-word, then finalises and saves to DB when the stream ends.
+   */
+  const doStreamCall = async (
+    newMessages: Message[],
+    userMsgId: string,
+    userMsgText: string,
+    convId: string,
+    now: number,
+  ) => {
+    const rawMessages: ChatMessage[] = newMessages.map((m) => ({
+      role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
+      content: m.text,
+    }));
+    const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
+    const systemRule = getSystemRule(advancedSettings);
+    const apiMessages: ChatMessage[] = systemRule
+      ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
+      : limitedMessages;
+
+    const aiMsgId = generateId();
+    const useThinking = thinking;
+
+    // Insert streaming placeholder AI message immediately so the user sees
+    // "thinking…" or a cursor instead of an empty screen.
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === convId
+          ? {
+              ...c,
+              messages: [
+                ...c.messages,
+                { id: aiMsgId, role: "ai" as const, text: "", streaming: true, thinking: useThinking },
+              ],
+            }
+          : c
+      )
+    );
+
+    let finalText = "";
+    let truncated = false;
+    let errorMsg = "";
+
+    try {
+      await streamChat({
+        model: modelId,
+        messages: apiMessages,
+        thinking: useThinking,
+        temperature: advancedSettings.temperature,
+        topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
+        onChunk: (delta, isThinking) => {
+          if (isThinking) return;
+          finalText += delta;
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === convId
+                ? { ...c, messages: c.messages.map((m) => m.id === aiMsgId ? { ...m, text: finalText } : m) }
+                : c
+            )
+          );
+        },
+        onDone: (t) => { truncated = t; },
+        onError: (msg) => { errorMsg = msg; },
+      });
+    } catch (err) {
+      errorMsg = err instanceof Error ? err.message : "请求失败";
+    }
+
+    const finalMsg: Message = {
+      id: aiMsgId,
+      role: "ai",
+      text: errorMsg ? `出错了：${errorMsg}` : finalText,
+      thinking: !errorMsg && useThinking,
+      streaming: false,
+      truncated: !errorMsg && truncated,
+    };
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === convId
+          ? {
+              ...c,
+              messages: c.messages.map((m) => (m.id === aiMsgId ? finalMsg : m)),
+              updatedAt: Date.now(),
+            }
+          : c
+      )
+    );
+
+    addMessagesMutation.mutate({
+      id: convId,
+      data: {
+        messages: [
+          { id: userMsgId, role: "user", text: userMsgText, thinking: false, createdAt: now },
+          { id: aiMsgId, role: "ai", text: finalMsg.text, thinking: finalMsg.thinking ?? false, createdAt: Date.now() },
+        ],
+      },
+    });
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || replying) return;
 
     const now = Date.now();
     const userMsg: Message = { id: generateId(), role: "user", text };
@@ -312,62 +415,8 @@ export default function ChatPage() {
       updateConvMutation.mutate({ id: activeId, data: { title: newTitle, updatedAt: now } });
     }
 
-    try {
-      const rawMessages: ChatMessage[] = newMessages.map((m) => ({
-        role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
-        content: m.text,
-      }));
-      const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
-      const systemRule = getSystemRule(advancedSettings);
-      const apiMessages: ChatMessage[] = systemRule
-        ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
-        : limitedMessages;
-
-      const result = await chatMutation.mutateAsync({
-        data: {
-          model: modelId as ChatCompletionInputModel,
-          messages: apiMessages,
-          thinking,
-          temperature: advancedSettings.temperature,
-          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
-        },
-      });
-      const aiMsg: Message = {
-        id: generateId(),
-        role: "ai",
-        text: result.text,
-        thinking: result.thinking,
-      };
-      updateActiveMessages([...newMessages, aiMsg]);
-      addMessagesMutation.mutate({
-        id: activeId,
-        data: {
-          messages: [
-            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
-            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: aiMsg.thinking ?? false, createdAt: Date.now() },
-          ],
-        },
-      });
-    } catch (err) {
-      const errorText = err instanceof Error ? err.message : "请求失败";
-      const aiMsg: Message = {
-        id: generateId(),
-        role: "ai",
-        text: `出错了：${errorText}`,
-      };
-      updateActiveMessages([...newMessages, aiMsg]);
-      addMessagesMutation.mutate({
-        id: activeId,
-        data: {
-          messages: [
-            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
-            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: false, createdAt: Date.now() },
-          ],
-        },
-      });
-    } finally {
-      setReplying(false);
-    }
+    await doStreamCall(newMessages, userMsg.id, userMsg.text, activeId, now);
+    setReplying(false);
   };
 
 
@@ -513,7 +562,7 @@ export default function ChatPage() {
 
   const handleVoiceSend = async (text: string) => {
     stopVoice();
-    if (!text.trim()) return;
+    if (!text.trim() || replying) return;
 
     const now = Date.now();
     const userMsg: Message = { id: generateId(), role: "user", text };
@@ -551,62 +600,8 @@ export default function ChatPage() {
       updateConvMutation.mutate({ id: activeId, data: { title: newTitle, updatedAt: now } });
     }
 
-    try {
-      const rawMessages: ChatMessage[] = newMessages.map((m) => ({
-        role: (m.role === "ai" ? "assistant" : "user") as "user" | "assistant",
-        content: m.text,
-      }));
-      const limitedMessages = applyContextLimit(rawMessages, advancedSettings.contextLimit);
-      const systemRule = getSystemRule(advancedSettings);
-      const apiMessages: ChatMessage[] = systemRule
-        ? [{ role: "system" as const, content: systemRule }, ...limitedMessages]
-        : limitedMessages;
-
-      const result = await chatMutation.mutateAsync({
-        data: {
-          model: modelId as ChatCompletionInputModel,
-          messages: apiMessages,
-          thinking,
-          temperature: advancedSettings.temperature,
-          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
-        },
-      });
-      const aiMsg: Message = {
-        id: generateId(),
-        role: "ai",
-        text: result.text,
-        thinking: result.thinking,
-      };
-      updateActiveMessages([...newMessages, aiMsg]);
-      addMessagesMutation.mutate({
-        id: activeId,
-        data: {
-          messages: [
-            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
-            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: aiMsg.thinking ?? false, createdAt: Date.now() },
-          ],
-        },
-      });
-    } catch (err) {
-      const errorText = err instanceof Error ? err.message : "请求失败";
-      const aiMsg: Message = {
-        id: generateId(),
-        role: "ai",
-        text: `出错了：${errorText}`,
-      };
-      updateActiveMessages([...newMessages, aiMsg]);
-      addMessagesMutation.mutate({
-        id: activeId,
-        data: {
-          messages: [
-            { id: userMsg.id, role: "user", text: userMsg.text, thinking: false, createdAt: now },
-            { id: aiMsg.id, role: "ai", text: aiMsg.text, thinking: false, createdAt: Date.now() },
-          ],
-        },
-      });
-    } finally {
-      setReplying(false);
-    }
+    await doStreamCall(newMessages, userMsg.id, userMsg.text, activeId, now);
+    setReplying(false);
   };
 
   const handleVoiceCancel = () => {
@@ -820,40 +815,86 @@ export default function ChatPage() {
         continuePrompt,
       ];
 
-      const result = await chatMutation.mutateAsync({
-        data: {
-          model: modelId as ChatCompletionInputModel,
-          messages: apiMessages,
-          thinking,
-          temperature: advancedSettings.temperature,
-          topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
-        },
-      });
+      const originalText = conv.messages[msgIndex].text;
+      let appendedText = "";
 
+      // Mark message as streaming
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeId
-            ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === msgId
-                    ? { ...m, text: m.text + "\n\n" + result.text, truncated: result.truncated ?? false }
-                    : m
-                ),
-              }
+            ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, streaming: true } : m) }
             : c
         )
       );
+
+      await streamChat({
+        model: modelId,
+        messages: apiMessages,
+        thinking,
+        temperature: advancedSettings.temperature,
+        topP: advancedSettings.topPEnabled ? advancedSettings.topP : undefined,
+        onChunk: (delta, isThinking) => {
+          if (isThinking) return;
+          appendedText += delta;
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === msgId
+                        ? { ...m, text: originalText + "\n\n" + appendedText }
+                        : m
+                    ),
+                  }
+                : c
+            )
+          );
+        },
+        onDone: (t) => {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === msgId
+                        ? { ...m, text: originalText + "\n\n" + appendedText, truncated: t, streaming: false }
+                        : m
+                    ),
+                  }
+                : c
+            )
+          );
+        },
+        onError: () => {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === activeId
+                ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, truncated: true, streaming: false } : m) }
+                : c
+            )
+          );
+        },
+      });
     } catch {
       // Restore truncated flag so user can retry
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeId
-            ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, truncated: true } : m) }
+            ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, truncated: true, streaming: false } : m) }
             : c
         )
       );
     } finally {
+      // Ensure no message is ever stuck in streaming state
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === activeId
+            ? { ...c, messages: c.messages.map((m) => m.id === msgId ? { ...m, streaming: false } : m) }
+            : c
+        )
+      );
       setReplying(false);
     }
   };
@@ -1878,28 +1919,45 @@ export default function ChatPage() {
                   className="msg-bubble-ai"
                   style={{ display: "flex", flexDirection: "column", gap: 10 }}
                 >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 14,
-                      color: "hsl(220 9% 60%)",
-                      fontStyle: "italic",
-                      paddingLeft: 2,
-                    }}
-                  >
-                    Thought for a second
-                  </p>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 16,
-                      color: "hsl(220 15% 12%)",
-                      lineHeight: 1.6,
-                      letterSpacing: 0.1,
-                    }}
-                  >
-                    {msg.text}
-                  </p>
+                  {msg.thinking && !msg.streaming && (
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 14,
+                        color: "hsl(220 9% 60%)",
+                        fontStyle: "italic",
+                        paddingLeft: 2,
+                      }}
+                    >
+                      Thought for a second
+                    </p>
+                  )}
+                  {msg.streaming && msg.thinking && !msg.text ? (
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 14,
+                        color: "hsl(220 9% 60%)",
+                        fontStyle: "italic",
+                        paddingLeft: 2,
+                      }}
+                    >
+                      思考中…
+                    </p>
+                  ) : (
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 16,
+                        color: "hsl(220 15% 12%)",
+                        lineHeight: 1.6,
+                        letterSpacing: 0.1,
+                      }}
+                    >
+                      {msg.text}
+                      {msg.streaming && <span style={{ opacity: 0.5 }}>▌</span>}
+                    </p>
+                  )}
                   <div
                     style={{
                       display: "flex",
@@ -2029,7 +2087,7 @@ export default function ChatPage() {
               );
             })
           )}
-          {replying && (
+          {replying && !messages.some((m) => m.streaming) && (
             <div
               className="msg-bubble-ai anim-fade-in"
               style={{ display: "flex", flexDirection: "column", gap: 10 }}

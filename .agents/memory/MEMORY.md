@@ -1,1 +1,2 @@
 - [DashScope Qwen ASR payload format](dashscope-qwen-asr-format.md) — qwen3-asr-flash uses the OpenAI-compatible chat completions endpoint with `input_audio` data URIs, not the native `/services/audio/asr/transcription` endpoint.
+- [Streaming chat implementation](streaming-chat.md) — SSE streaming via POST /api/chat/stream; frontend uses fetch+ReadableStream via stream-chat.ts; shared doStreamCall helper in ChatPage.tsx covers send/voiceSend/continue.

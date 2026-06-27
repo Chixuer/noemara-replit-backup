@@ -53,6 +53,61 @@ const PROVIDER_CONFIGS: Record<
   },
 };
 
+function buildPayload(
+  model: string,
+  config: ModelConfig,
+  messages: unknown,
+  thinking: boolean | undefined,
+  temperature: number | undefined,
+  topP: number | undefined,
+  stream: boolean,
+): Record<string, unknown> {
+  const effectiveModel =
+    thinking && config.thinkingModel ? config.thinkingModel : model;
+
+  const payload: Record<string, unknown> = {
+    model: effectiveModel,
+    messages,
+    stream,
+  };
+
+  if (thinking && config.thinkingParam) {
+    Object.assign(payload, config.thinkingParam);
+  }
+
+  const resolvedTemp = resolveTemperature(model, temperature);
+  if (resolvedTemp !== undefined) payload.temperature = resolvedTemp;
+
+  const resolvedTopP = resolveTopP(model, topP);
+  if (resolvedTopP !== undefined) payload.top_p = resolvedTopP;
+
+  return payload;
+}
+
+function validateRequest(
+  model: string,
+  config: ModelConfig | undefined,
+  caps: ReturnType<typeof getCapabilities>,
+  providerKey: string | undefined,
+  temperature: number | undefined,
+  topP: number | undefined,
+  log: { warn: (obj: object, msg: string) => void; error: (msg: string) => void },
+): string | null {
+  if (!config) return "Unsupported model";
+  if (!caps) return "Model capabilities not found";
+  if (!providerKey) {
+    log.error(`${config.provider.toUpperCase()}_API_KEY is not configured`);
+    return `${config.provider} API key is not configured on the server`;
+  }
+  if (temperature !== undefined && !caps.supportsTemperature) {
+    log.warn({ model, temperature }, "Client sent temperature for a model that does not support it — ignoring");
+  }
+  if (topP !== undefined && !caps.supportsTopP) {
+    log.warn({ model, topP }, "Client sent topP for a model that does not support it — ignoring");
+  }
+  return null;
+}
+
 function extractText(raw: unknown): string {
   if (typeof raw !== "object" || raw == null) return "";
   const r = raw as Record<string, unknown>;
@@ -82,6 +137,8 @@ function extractFinishReason(raw: unknown): string | undefined {
 
 const router: IRouter = Router();
 
+// ─── Non-streaming endpoint ───────────────────────────────────────────────────
+
 router.post("/chat", async (req, res): Promise<void> => {
   const parsed = ChatCompletionsBody.safeParse(req.body);
   if (!parsed.success) {
@@ -92,68 +149,16 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const { model, messages, thinking, temperature, topP } = parsed.data;
   const config = MODELS[model];
-  if (!config) {
-    res.status(400).json({ error: "Unsupported model" });
-    return;
-  }
-
-  // Validate parameters against model capabilities
   const caps = getCapabilities(model);
-  if (!caps) {
-    res.status(400).json({ error: "Model capabilities not found" });
+  const providerConfig = PROVIDER_CONFIGS[config?.provider as Provider] ?? { url: "", key: undefined };
+
+  const validationError = validateRequest(model, config, caps, providerConfig.key, temperature, topP, req.log);
+  if (validationError) {
+    res.status(config && caps ? 500 : 400).json({ error: validationError });
     return;
   }
 
-  const providerConfig = PROVIDER_CONFIGS[config.provider];
-  if (!providerConfig.key) {
-    req.log.error(`${config.provider.toUpperCase()}_API_KEY is not configured`);
-    res.status(500).json({
-      error: `${config.provider} API key is not configured on the server`,
-    });
-    return;
-  }
-
-  // Validate temperature: reject if model doesn't support it and user explicitly set it
-  if (temperature !== undefined && !caps.supportsTemperature) {
-    req.log.warn(
-      { model, temperature },
-      "Client sent temperature for a model that does not support it — ignoring"
-    );
-  }
-
-  // Validate topP: same check
-  if (topP !== undefined && !caps.supportsTopP) {
-    req.log.warn(
-      { model, topP },
-      "Client sent topP for a model that does not support it — ignoring"
-    );
-  }
-
-  const effectiveModel =
-    thinking && config.thinkingModel ? config.thinkingModel : model;
-
-  const payload: Record<string, unknown> = {
-    model: effectiveModel,
-    messages,
-    stream: false,
-  };
-
-  // Apply thinking params
-  if (thinking && config.thinkingParam) {
-    Object.assign(payload, config.thinkingParam);
-  }
-
-  // Apply temperature only if model supports it
-  const resolvedTemp = resolveTemperature(model, temperature);
-  if (resolvedTemp !== undefined) {
-    payload.temperature = resolvedTemp;
-  }
-
-  // Apply topP only if model supports it
-  const resolvedTopP = resolveTopP(model, topP);
-  if (resolvedTopP !== undefined) {
-    payload.top_p = resolvedTopP;
-  }
+  const payload = buildPayload(model, config, messages, thinking, temperature, topP, false);
 
   try {
     const response = await fetch(providerConfig.url, {
@@ -205,6 +210,128 @@ router.post("/chat", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Chat request failed");
     res.status(500).json({ error: "Chat request failed" });
+  }
+});
+
+// ─── Streaming endpoint (SSE) ─────────────────────────────────────────────────
+
+router.post("/chat/stream", async (req, res): Promise<void> => {
+  const parsed = ChatCompletionsBody.safeParse(req.body);
+  if (!parsed.success) {
+    req.log.warn({ errors: parsed.error.message }, "Invalid chat/stream request body");
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { model, messages, thinking, temperature, topP } = parsed.data;
+  const config = MODELS[model];
+  const caps = getCapabilities(model);
+  const providerConfig = PROVIDER_CONFIGS[config?.provider as Provider] ?? { url: "", key: undefined };
+
+  const validationError = validateRequest(model, config, caps, providerConfig.key, temperature, topP, req.log);
+  if (validationError) {
+    res.status(config && caps ? 500 : 400).json({ error: validationError });
+    return;
+  }
+
+  const payload = buildPayload(model, config, messages, thinking, temperature, topP, true);
+
+  // SSE headers
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const sendEvent = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const response = await fetch(providerConfig.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${providerConfig.key}`,
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text();
+      let errorMsg = "Chat completion failed";
+      try {
+        const raw = JSON.parse(bodyText) as Record<string, unknown>;
+        if (typeof raw.error === "string") errorMsg = raw.error;
+        else if (raw.error) errorMsg = JSON.stringify(raw.error);
+      } catch { /* ignore */ }
+      req.log.error({ status: response.status }, `${config.provider} streaming error`);
+      sendEvent({ type: "error", message: errorMsg });
+      res.end();
+      return;
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      sendEvent({ type: "error", message: "No response body from provider" });
+      res.end();
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finishReason: string | null = null;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (!data || data === "[DONE]") continue;
+
+          let chunk: Record<string, unknown>;
+          try {
+            chunk = JSON.parse(data) as Record<string, unknown>;
+          } catch {
+            continue;
+          }
+
+          const choices = chunk.choices as Array<Record<string, unknown>> | undefined;
+          if (!choices?.length) continue;
+
+          const choice = choices[0] as Record<string, unknown>;
+          const delta = choice.delta as Record<string, unknown> | undefined;
+          const fr = choice.finish_reason as string | null | undefined;
+          if (fr) finishReason = fr;
+
+          if (typeof delta?.reasoning_content === "string" && delta.reasoning_content) {
+            sendEvent({ type: "thinking", delta: delta.reasoning_content });
+          }
+          if (typeof delta?.content === "string" && delta.content) {
+            sendEvent({ type: "text", delta: delta.content });
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    sendEvent({ type: "done", truncated: finishReason === "length" });
+  } catch (err) {
+    req.log.error({ err }, "Chat streaming request failed");
+    if (!res.writableEnded) {
+      sendEvent({ type: "error", message: "Chat streaming failed" });
+    }
+  } finally {
+    res.end();
   }
 });
 
