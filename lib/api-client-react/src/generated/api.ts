@@ -22,6 +22,8 @@ import type {
 import type {
   AudioTranscriptionInput,
   AudioTranscriptionResult,
+  ChatCompletionInput,
+  ChatCompletionResult,
   ErrorResponse,
   HealthStatus
 } from './api.schemas';
@@ -202,5 +204,77 @@ export const useTranscribeAudio = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getTranscribeAudioMutationOptions(options));
+    }
+
+export const getChatCompletionsUrl = () => {
+
+
+
+
+  return `/api/chat`
+}
+
+/**
+ * Proxies a chat request to the selected AI provider (DeepSeek, Qwen, or Kimi).
+ * API keys are configured on the server and are never exposed to the client.
+ * @summary Chat completions
+ */
+export const chatCompletions = async (chatCompletionInput: ChatCompletionInput, options?: RequestInit): Promise<ChatCompletionResult> => {
+
+  return customFetch<ChatCompletionResult>(getChatCompletionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(chatCompletionInput)
+  }
+);}
+
+
+
+
+export const getChatCompletionsMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof chatCompletions>>, TError,{data: BodyType<ChatCompletionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof chatCompletions>>, TError,{data: BodyType<ChatCompletionInput>}, TContext> => {
+
+const mutationKey = ['chatCompletions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof chatCompletions>>, {data: BodyType<ChatCompletionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  chatCompletions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChatCompletionsMutationResult = NonNullable<Awaited<ReturnType<typeof chatCompletions>>>
+    export type ChatCompletionsMutationBody = BodyType<ChatCompletionInput>
+    export type ChatCompletionsMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Chat completions
+ */
+export const useChatCompletions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof chatCompletions>>, TError,{data: BodyType<ChatCompletionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof chatCompletions>>,
+        TError,
+        {data: BodyType<ChatCompletionInput>},
+        TContext
+      > => {
+      return useMutation(getChatCompletionsMutationOptions(options));
     }
 

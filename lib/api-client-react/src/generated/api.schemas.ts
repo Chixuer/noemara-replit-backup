@@ -30,6 +30,47 @@ export interface AudioTranscriptionResult {
   raw?: AudioTranscriptionResultRaw;
 }
 
+/**
+ * Selected model ID (e.g. deepseek-v4-flash, qwen3.7-plus, kimi-k2.7-code, kimi-k2.7-code-highspeed)
+ */
+export type ChatCompletionInputModel = typeof ChatCompletionInputModel[keyof typeof ChatCompletionInputModel];
+
+
+export const ChatCompletionInputModel = {
+  'deepseek-v4-flash': 'deepseek-v4-flash',
+  'qwen37-plus': 'qwen3.7-plus',
+  'kimi-k27-code': 'kimi-k2.7-code',
+  'kimi-k27-code-highspeed': 'kimi-k2.7-code-highspeed',
+} as const;
+
+export type ChatMessageRole = typeof ChatMessageRole[keyof typeof ChatMessageRole];
+
+
+export const ChatMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+  system: 'system',
+} as const;
+
+export interface ChatMessage {
+  role: ChatMessageRole;
+  content: string;
+}
+
+export interface ChatCompletionInput {
+  /** Selected model ID (e.g. deepseek-v4-flash, qwen3.7-plus, kimi-k2.7-code, kimi-k2.7-code-highspeed) */
+  model: ChatCompletionInputModel;
+  messages: ChatMessage[];
+  /** Enable deep thinking / reasoning mode. Kimi models always use deep thinking. */
+  thinking?: boolean;
+}
+
+export interface ChatCompletionResult {
+  text: string;
+  model?: string;
+  thinking?: boolean;
+}
+
 export interface ErrorResponse {
   error: string;
   details?: string;

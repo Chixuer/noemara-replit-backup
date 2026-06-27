@@ -37,3 +37,26 @@ export const TranscribeAudioResponse = zod.object({
 })
 
 
+/**
+ * Proxies a chat request to the selected AI provider (DeepSeek, Qwen, or Kimi).
+ * API keys are configured on the server and are never exposed to the client.
+ * @summary Chat completions
+ */
+export const chatCompletionsBodyThinkingDefault = false;
+
+export const ChatCompletionsBody = zod.object({
+  "model": zod.enum(['deepseek-v4-flash', 'qwen3.7-plus', 'kimi-k2.7-code', 'kimi-k2.7-code-highspeed']).describe('Selected model ID (e.g. deepseek-v4-flash, qwen3.7-plus, kimi-k2.7-code, kimi-k2.7-code-highspeed)'),
+  "messages": zod.array(zod.object({
+  "role": zod.enum(['user', 'assistant', 'system']),
+  "content": zod.string()
+})),
+  "thinking": zod.boolean().default(chatCompletionsBodyThinkingDefault).describe('Enable deep thinking \/ reasoning mode. Kimi models always use deep thinking.')
+})
+
+export const ChatCompletionsResponse = zod.object({
+  "text": zod.string(),
+  "model": zod.string().optional(),
+  "thinking": zod.boolean().optional()
+})
+
+

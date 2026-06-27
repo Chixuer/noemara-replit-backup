@@ -16,13 +16,18 @@ import {
   PinOff,
   Circle,
   Search,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import VoiceRecorder from "../components/VoiceRecorder";
+import { useChatCompletions } from "@workspace/api-client-react";
+import type { ChatCompletionInput, ChatMessage, ChatCompletionInputModel } from "@workspace/api-client-react";
 
 interface Message {
   id: string;
   role: "user" | "ai";
   text: string;
+  thinking?: boolean;
 }
 
 interface Conversation {
@@ -34,12 +39,25 @@ interface Conversation {
   updatedAt: number;
 }
 
-const AI_RESPONSE = "哈喽，Chi Xu！👋 今天想搞学习、做应用，还是聊点别的？";
+interface ChatModel {
+  id: string;
+  name: string;
+  provider: "deepseek" | "qwen" | "kimi";
+  supportsThinking: boolean;
+}
 
-const MODELS = [
-  { label: "Flash", value: "flash" },
-  { label: "Thinking", value: "thinking" },
+const CHAT_MODELS: ChatModel[] = [
+  { id: "deepseek-v4-flash", name: "deepseek-v4-flash", provider: "deepseek", supportsThinking: true },
+  { id: "qwen3.7-plus", name: "qwen3.7-plus", provider: "qwen", supportsThinking: true },
+  { id: "kimi-k2.7-code", name: "kimi-k2.7-code", provider: "kimi", supportsThinking: false },
+  { id: "kimi-k2.7-code-highspeed", name: "kimi-k2.7-code-highspeed", provider: "kimi", supportsThinking: false },
 ];
+
+const DEFAULT_MODEL_ID = "deepseek-v4-flash";
+
+function isThinkingModel(modelId: string) {
+  return CHAT_MODELS.find((m) => m.id === modelId)?.supportsThinking ?? false;
+}
 
 function generateId() {
   return Date.now().toString() + Math.random().toString(36).slice(2, 8);
@@ -80,10 +98,11 @@ export default function ChatPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [inputText, setInputText] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("thinking");
+  const [modelId, setModelId] = useState(DEFAULT_MODEL_ID);
+  const [thinking, setThinking] = useState(false);
+  const chatMutation = useChatCompletions();
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [menuMsgId, setMenuMsgId] = useState<string | null>(null);
   const [replying, setReplying] = useState(false);
@@ -142,7 +161,7 @@ export default function ChatPage() {
     );
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = inputText.trim();
     if (!text) return;
 
@@ -162,14 +181,37 @@ export default function ChatPage() {
 
     setInputText("");
     setReplying(true);
-    setIsThinking(true);
 
-    setTimeout(() => {
-      setIsThinking(false);
-      const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
+    try {
+      const apiMessages: ChatMessage[] = newMessages.map((m) => ({
+        role: m.role === "ai" ? "assistant" : "user",
+        content: m.text,
+      }));
+      const result = await chatMutation.mutateAsync({
+        data: {
+          model: modelId as ChatCompletionInputModel,
+          messages: apiMessages,
+          thinking,
+        },
+      });
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: result.text,
+        thinking: result.thinking,
+      };
       updateActiveMessages([...newMessages, aiMsg]);
+    } catch (err) {
+      const errorText = err instanceof Error ? err.message : "请求失败";
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: `出错了：${errorText}`,
+      };
+      updateActiveMessages([...newMessages, aiMsg]);
+    } finally {
       setReplying(false);
-    }, 1200);
+    }
   };
 
   const handleDelete = (msgId: string) => {
@@ -256,7 +298,7 @@ export default function ChatPage() {
     setInputText(text);
   };
 
-  const handleVoiceSend = (text: string) => {
+  const handleVoiceSend = async (text: string) => {
     stopVoice();
     if (!text.trim()) return;
 
@@ -275,14 +317,37 @@ export default function ChatPage() {
     );
 
     setReplying(true);
-    setIsThinking(true);
 
-    setTimeout(() => {
-      setIsThinking(false);
-      const aiMsg: Message = { id: generateId(), role: "ai", text: AI_RESPONSE };
+    try {
+      const apiMessages: ChatMessage[] = newMessages.map((m) => ({
+        role: m.role === "ai" ? "assistant" : "user",
+        content: m.text,
+      }));
+      const result = await chatMutation.mutateAsync({
+        data: {
+          model: modelId as ChatCompletionInputModel,
+          messages: apiMessages,
+          thinking,
+        },
+      });
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: result.text,
+        thinking: result.thinking,
+      };
       updateActiveMessages([...newMessages, aiMsg]);
+    } catch (err) {
+      const errorText = err instanceof Error ? err.message : "请求失败";
+      const aiMsg: Message = {
+        id: generateId(),
+        role: "ai",
+        text: `出错了：${errorText}`,
+      };
+      updateActiveMessages([...newMessages, aiMsg]);
+    } finally {
       setReplying(false);
-    }, 1200);
+    }
   };
 
   const handleVoiceCancel = () => {
@@ -687,71 +752,151 @@ export default function ChatPage() {
               className="anim-slide-down"
               style={{
                 background: "hsl(0 0% 100%)",
-                borderRadius: 20,
-                padding: "18px 0",
-                width: 260,
-                boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                borderRadius: 22,
+                padding: "14px 0",
+                width: 280,
+                boxShadow: "0 12px 40px rgba(0,0,0,0.14)",
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              <button
+              {/* Header with current model */}
+              <div
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  width: "100%",
-                  padding: "0 20px 12px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
+                  padding: "0 20px 10px",
                   borderBottom: "1px solid hsl(0 0% 92%)",
-                  fontSize: 17,
-                  fontWeight: 600,
-                  color: "hsl(220 15% 10%)",
-                  letterSpacing: -0.3,
+                  marginBottom: 6,
                 }}
               >
-                <span>GPT-5.5</span>
-                <ChevronRight size={16} strokeWidth={2.2} style={{ color: "hsl(220 9% 55%)" }} />
-              </button>
-              <div
-                style={{
-                  padding: "12px 20px 6px",
-                  fontSize: 13,
-                  color: "hsl(220 9% 55%)",
-                  fontWeight: 500,
-                  letterSpacing: 0.2,
-                }}
-              >
-                Intelligence
+                <span style={{ fontSize: 13, color: "hsl(220 9% 55%)", fontWeight: 500 }}>
+                  当前模型
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "hsl(220 15% 10%)" }}>
+                    {CHAT_MODELS.find((m) => m.id === modelId)?.name ?? modelId}
+                  </span>
+                  {thinking && (
+                    <Sparkles size={14} strokeWidth={1.8} style={{ color: "hsl(142 72% 36%)" }} />
+                  )}
+                </div>
               </div>
-              {MODELS.map((m) => (
+
+              {/* Model list */}
+              {CHAT_MODELS.map((m) => (
                 <button
-                  key={m.value}
+                  key={m.id}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     width: "100%",
-                    padding: "10px 20px",
+                    padding: "12px 20px",
                     background: "none",
                     border: "none",
                     cursor: "pointer",
-                    fontSize: 16,
-                    fontWeight: selectedModel === m.value ? 600 : 400,
-                    color: selectedModel === m.value ? "hsl(220 15% 10%)" : "hsl(220 15% 25%)",
+                    fontSize: 15,
+                    fontWeight: modelId === m.id ? 600 : 400,
+                    color: modelId === m.id ? "hsl(220 15% 10%)" : "hsl(220 15% 25%)",
+                    transition: "background 0.15s ease",
                   }}
                   onClick={() => {
-                    setSelectedModel(m.value);
+                    setModelId(m.id);
+                    if (!m.supportsThinking) setThinking(true);
                     setModelOpen(false);
                   }}
                 >
-                  <span>{m.label}</span>
-                  {selectedModel === m.value && (
-                    <Check size={18} strokeWidth={2.5} style={{ color: "hsl(220 15% 15%)" }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background:
+                          m.provider === "deepseek"
+                            ? "hsl(220 90% 60%)"
+                            : m.provider === "qwen"
+                              ? "hsl(35 90% 55%)"
+                              : "hsl(260 80% 65%)",
+                      }}
+                    />
+                    <span>{m.name}</span>
+                  </div>
+                  {modelId === m.id && (
+                    <Check size={18} strokeWidth={2.5} style={{ color: "hsl(142 72% 36%)" }} />
                   )}
                 </button>
               ))}
+
+              {/* Deep thinking toggle — only for models that support it */}
+              {isThinkingModel(modelId) && (
+                <div
+                  style={{
+                    margin: "8px 20px 0",
+                    padding: "10px 12px",
+                    borderRadius: 14,
+                    background: "hsl(220 14% 96%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "hsl(220 15% 25%)", fontWeight: 500 }}>
+                    深度思考
+                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      background: "hsl(0 0% 100%)",
+                      borderRadius: 20,
+                      padding: 2,
+                      boxShadow: "inset 0 0 0 1px hsl(220 14% 88%)",
+                    }}
+                  >
+                    <button
+                      style={{
+                        border: "none",
+                        borderRadius: 18,
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        background: thinking ? "transparent" : "hsl(220 14% 92%)",
+                        color: thinking ? "hsl(220 9% 55%)" : "hsl(220 15% 15%)",
+                        transition: "all 0.2s ease",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                      onClick={() => setThinking(false)}
+                    >
+                      <Zap size={12} strokeWidth={2} /> Flash
+                    </button>
+                    <button
+                      style={{
+                        border: "none",
+                        borderRadius: 18,
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        background: thinking ? "hsl(220 14% 92%)" : "transparent",
+                        color: thinking ? "hsl(220 15% 15%)" : "hsl(220 9% 55%)",
+                        transition: "all 0.2s ease",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                      onClick={() => setThinking(true)}
+                    >
+                      <Sparkles size={12} strokeWidth={2} /> Thinking
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -790,24 +935,28 @@ export default function ChatPage() {
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
-                gap: 2,
+                gap: 4,
               }}
               onClick={() => setModelOpen(true)}
             >
               <span
                 style={{
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: 600,
                   color: "hsl(220 15% 12%)",
                   letterSpacing: -0.3,
+                  maxWidth: 160,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                Thinking
+                {CHAT_MODELS.find((m) => m.id === modelId)?.name ?? modelId}
               </span>
               <ChevronRight
                 size={16}
                 strokeWidth={2.2}
-                style={{ color: "hsl(220 15% 40%)", marginTop: 1 }}
+                style={{ color: "hsl(220 15% 40%)", marginTop: 1, flexShrink: 0 }}
               />
             </button>
           </div>
@@ -1071,17 +1220,19 @@ export default function ChatPage() {
                   className="msg-bubble-ai"
                   style={{ display: "flex", flexDirection: "column", gap: 10 }}
                 >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 14,
-                      color: "hsl(220 9% 60%)",
-                      fontStyle: "italic",
-                      paddingLeft: 2,
-                    }}
-                  >
-                    Thought for a second
-                  </p>
+                  {msg.thinking && (
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: 14,
+                        color: "hsl(220 9% 60%)",
+                        fontStyle: "italic",
+                        paddingLeft: 2,
+                      }}
+                    >
+                      Thought for a second
+                    </p>
+                  )}
                   <p
                     style={{
                       margin: 0,

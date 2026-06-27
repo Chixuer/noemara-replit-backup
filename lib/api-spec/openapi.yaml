@@ -60,6 +60,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /chat:
+    post:
+      operationId: chatCompletions
+      tags: [chat]
+      summary: Chat completions
+      description: |
+        Proxies a chat request to the selected AI provider (DeepSeek, Qwen, or Kimi).
+        API keys are configured on the server and are never exposed to the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionInput"
+      responses:
+        "200":
+          description: Chat completion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Chat completion failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -94,6 +127,50 @@ components:
         raw:
           type: object
           description: Raw ASR provider response
+    ChatCompletionInput:
+      type: object
+      required:
+        - model
+        - messages
+      properties:
+        model:
+          type: string
+          description: Selected model ID (e.g. deepseek-v4-flash, qwen3.7-plus, kimi-k2.7-code, kimi-k2.7-code-highspeed)
+          enum:
+            - deepseek-v4-flash
+            - qwen3.7-plus
+            - kimi-k2.7-code
+            - kimi-k2.7-code-highspeed
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        thinking:
+          type: boolean
+          description: Enable deep thinking / reasoning mode. Kimi models always use deep thinking.
+          default: false
+    ChatMessage:
+      type: object
+      required:
+        - role
+        - content
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+    ChatCompletionResult:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+        model:
+          type: string
+        thinking:
+          type: boolean
     ErrorResponse:
       type: object
       required:
